@@ -3,6 +3,7 @@ import { useAlertsStore } from '../../stores/alertsStore'
 import IngestionPanel from '../complaints/IngestionPanel'
 import OntologyModal from '../ontology/OntologyModal'
 import SimulationModal from '../simulation/SimulationModal'
+import ThreeDModal from '../three/ThreeDModal'
 import type { AlertSeverity } from '../../types/alert'
 
 const SEVERITY_COLOR: Record<AlertSeverity, string> = {
@@ -24,6 +25,7 @@ export default function Sidebar() {
   const [ingestOpen, setIngestOpen] = useState(false)
   const [ontologyOpen, setOntologyOpen] = useState(false)
   const [simOpen, setSimOpen] = useState(false)
+  const [threeDOpen, setThreeDOpen] = useState(false)
   const [active, setActive] = useState('Dashboard')
 
   function go(item: { label: string; target: string | null }) {
@@ -79,6 +81,16 @@ export default function Sidebar() {
           <span>Failure Simulation</span>
         </button>
 
+        {/* 3D view */}
+        <button
+          onClick={() => setThreeDOpen(true)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded mt-1 text-sm transition-colors"
+          style={{ background: '#1a2235', color: '#6ee7b7', border: '1px solid #1f2937' }}
+        >
+          <span>◈</span>
+          <span>3D Command View</span>
+        </button>
+
         {/* Ingest button */}
         <button
           onClick={() => setIngestOpen(true)}
@@ -92,6 +104,7 @@ export default function Sidebar() {
       <IngestionPanel open={ingestOpen} onClose={() => setIngestOpen(false)} />
       <OntologyModal open={ontologyOpen} onClose={() => setOntologyOpen(false)} />
       <SimulationModal open={simOpen} onClose={() => setSimOpen(false)} />
+      <ThreeDModal open={threeDOpen} onClose={() => setThreeDOpen(false)} />
 
       {/* Alerts feed */}
       <div className="flex-1 overflow-hidden flex flex-col" style={{ borderTop: '1px solid #1f2937' }}>

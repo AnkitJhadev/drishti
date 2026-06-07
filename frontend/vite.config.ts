@@ -21,6 +21,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Keep the offline precache lean — the heavy 3D scene loads on demand only.
+        globIgnores: ['**/TowerScene-*.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/tile\.openstreetmap\.org\/.*/i,

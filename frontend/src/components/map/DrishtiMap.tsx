@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer } from 'react-leaflet'
+import type { Map as LeafletMap } from 'leaflet'
 import TowerMarker from './TowerMarker'
 import ComplaintHeatmap from './ComplaintHeatmap'
 import { useTowersStore } from '../../stores/towersStore'
@@ -20,10 +21,22 @@ export default function DrishtiMap() {
   const towers = useTowersStore((s) => s.towers)
   const complaints = useComplaintsStore((s) => s.complaints)
   const [showHeatmap, setShowHeatmap] = useState(true)
+  const [expanded, setExpanded] = useState(false)
+  const mapRef = useRef<LeafletMap | null>(null)
+
+  // Leaflet must recompute tiles after the container resizes.
+  useEffect(() => {
+    const t = setTimeout(() => mapRef.current?.invalidateSize(), 250)
+    return () => clearTimeout(t)
+  }, [expanded])
 
   return (
-    <div className="h-full relative rounded overflow-hidden" style={{ border: '1px solid #1f2937' }}>
+    <div
+      className="relative rounded-lg overflow-hidden transition-[height] duration-300"
+      style={{ border: '1px solid #1f2937', height: expanded ? '82vh' : 460 }}
+    >
       <MapContainer
+        ref={mapRef}
         center={INDIA_CENTER}
         zoom={5}
         style={{ height: '100%', width: '100%', background: '#0a0f1e' }}
@@ -50,17 +63,27 @@ export default function DrishtiMap() {
         Network Map · {towers.length} towers
       </div>
 
-      {/* Heatmap toggle */}
-      <button
-        onClick={() => setShowHeatmap((v) => !v)}
-        className={`absolute top-2 right-2 z-[1000] px-2.5 py-1.5 rounded-lg text-xs transition-colors ${showHeatmap ? '' : 'dr-glass'}`}
-        style={{
-          background: showHeatmap ? '#f59e0b' : undefined,
-          color: showHeatmap ? '#0a0f1e' : '#9ca3af',
-        }}
-      >
-        {showHeatmap ? '◉ Heatmap On' : '○ Heatmap Off'}
-      </button>
+      {/* Controls */}
+      <div className="absolute top-2 right-2 z-[1000] flex gap-2">
+        <button
+          onClick={() => setShowHeatmap((v) => !v)}
+          className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${showHeatmap ? '' : 'dr-glass'}`}
+          style={{
+            background: showHeatmap ? '#f59e0b' : undefined,
+            color: showHeatmap ? '#0a0f1e' : '#9ca3af',
+          }}
+        >
+          {showHeatmap ? '◉ Heatmap On' : '○ Heatmap Off'}
+        </button>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="dr-glass px-2.5 py-1.5 rounded-lg text-xs transition-colors"
+          style={{ color: '#9ca3af' }}
+          title={expanded ? 'Collapse map' : 'Expand map'}
+        >
+          {expanded ? '⤡ Collapse' : '⤢ Expand'}
+        </button>
+      </div>
 
       {/* Legend */}
       <div className="dr-glass absolute bottom-2 left-2 z-[1000] px-3 py-2 rounded-lg">

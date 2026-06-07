@@ -32,27 +32,22 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="h-full flex flex-col p-3 gap-3">
-        {/* Main grid */}
-        <div className="flex-1 grid gap-3" style={{ gridTemplateColumns: '1fr 340px', gridTemplateRows: '1fr 1fr', minHeight: 0 }}>
-          {/* Map — Hour 8 ✓ */}
-          <div style={{ gridColumn: '1', gridRow: '1', minHeight: 0 }}>
-            <DrishtiMap />
-          </div>
+      <div className="p-3 space-y-3">
+        {/* Map — full width, tall, expandable (Hour 8) */}
+        <DrishtiMap />
 
-          {/* Metrics — Hour 9 ✓ */}
-          <div style={{ gridColumn: '2', gridRow: '1 / span 2', minHeight: 0 }}>
-            <AnalyticsPanel />
-          </div>
-
-          {/* Live complaint feed — Hour 7 ✓ */}
-          <div style={{ gridColumn: '1', gridRow: '2', minHeight: 0 }}>
+        {/* Feed + Metrics side by side (Hours 7 & 9) */}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div style={{ height: 400 }}>
             <ComplaintFeed />
+          </div>
+          <div style={{ height: 400 }}>
+            <AnalyticsPanel />
           </div>
         </div>
 
-        {/* NL Query chat — Hour 10 ✓ */}
-        <div style={{ height: 240, minHeight: 0 }}>
+        {/* NL Query chat (Hour 10) */}
+        <div style={{ height: 320 }}>
           <NLQueryChat />
         </div>
       </div>

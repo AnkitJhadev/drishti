@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './env'   // MUST be first — loads root .env before any other module
 import express from 'express'
 import cors from 'cors'
 import { createServer } from 'http'

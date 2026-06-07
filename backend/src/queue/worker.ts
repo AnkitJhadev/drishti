@@ -1,14 +1,19 @@
 import { Worker, type ConnectionOptions } from 'bullmq'
+import IORedis from 'ioredis'
 import { runIngestionAgent } from '../agents/ingestionAgent'
 import { runPatternAgent } from '../agents/patternAgent'
 import { logger } from '../utils/logger'
 import type { IngestJobData } from './jobs/ingestJob'
 import type { SourceType } from '../rag/chunker'
 
-// Shared Redis connection config — used by both Queue and Worker
-export const redisConnection: ConnectionOptions = {
-  url: process.env.REDIS_URL ?? 'redis://localhost:6379',
-}
+// Shared Redis connection — used by both Queue and Worker.
+// maxRetriesPerRequest: null is REQUIRED by BullMQ.
+// rediss:// URLs (Upstash) enable TLS automatically.
+// Cast resolves a harmless ioredis version-dedupe type mismatch with bullmq.
+export const redisConnection = new IORedis(
+  process.env.REDIS_URL ?? 'redis://localhost:6379',
+  { maxRetriesPerRequest: null }
+) as unknown as ConnectionOptions
 
 let ingestCount = 0   // trigger pattern agent every 10 ingestions
 

@@ -17,6 +17,7 @@ import towersRouter from './routes/towers'
 import alertsRouter from './routes/alerts'
 import recommendationsRouter from './routes/recommendations'
 import aiRouter from './routes/ai'
+import ontologyRouter from './routes/ontology'
 
 const app = express()
 const httpServer = createServer(app)
@@ -37,6 +38,7 @@ app.use('/towers',          towersRouter)
 app.use('/alerts',          alertsRouter)
 app.use('/recommendations', recommendationsRouter)
 app.use('/ai',              aiRouter)
+app.use('/ontology',        ontologyRouter)
 
 // ── Global error handler (must be last) ─────────────────
 app.use(errorHandler)

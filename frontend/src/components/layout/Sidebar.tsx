@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAlertsStore } from '../../stores/alertsStore'
 import IngestionPanel from '../complaints/IngestionPanel'
+import OntologyModal from '../ontology/OntologyModal'
 import type { AlertSeverity } from '../../types/alert'
 
 const SEVERITY_COLOR: Record<AlertSeverity, string> = {
@@ -20,6 +21,7 @@ export default function Sidebar() {
   const alerts = useAlertsStore((s) => s.alerts)
   const unread = alerts.filter((a) => !a.read).length
   const [ingestOpen, setIngestOpen] = useState(false)
+  const [ontologyOpen, setOntologyOpen] = useState(false)
   const [active, setActive] = useState('Dashboard')
 
   function go(item: { label: string; target: string | null }) {
@@ -55,6 +57,16 @@ export default function Sidebar() {
           </button>
         ))}
 
+        {/* Network graph */}
+        <button
+          onClick={() => setOntologyOpen(true)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded mt-2 text-sm transition-colors"
+          style={{ background: '#1a2235', color: '#a78bfa', border: '1px solid #1f2937' }}
+        >
+          <span>🕸</span>
+          <span>Network Graph</span>
+        </button>
+
         {/* Ingest button */}
         <button
           onClick={() => setIngestOpen(true)}
@@ -66,6 +78,7 @@ export default function Sidebar() {
       </nav>
 
       <IngestionPanel open={ingestOpen} onClose={() => setIngestOpen(false)} />
+      <OntologyModal open={ontologyOpen} onClose={() => setOntologyOpen(false)} />
 
       {/* Alerts feed */}
       <div className="flex-1 overflow-hidden flex flex-col" style={{ borderTop: '1px solid #1f2937' }}>

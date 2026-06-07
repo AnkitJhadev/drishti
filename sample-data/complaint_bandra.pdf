@@ -1,0 +1,64 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1377 >>
+stream
+BT /F1 11 Tf 50 760 Td 15 TL
+(TELECOM CUSTOMER COMPLAINT - FORMAL REPORT) Tj T*
+() Tj T*
+(Date: 07 June 2026) Tj T*
+(Customer: Rajesh Kumar   Mobile: 98200-11045) Tj T*
+(Service Area: Bandra West, Mumbai) Tj T*
+() Tj T*
+(Subject: Complete network outage for over 6 hours) Tj T*
+() Tj T*
+(To the Network Operations Team,) Tj T*
+() Tj T*
+(I am writing to report a complete loss of mobile network and) Tj T*
+(data services in the Bandra West area of Mumbai since early) Tj T*
+(this morning. There has been absolutely no signal on any device) Tj T*
+(in my building, and neither calls nor mobile internet are working.) Tj T*
+() Tj T*
+(This is the third such outage in Bandra this month. Several of my) Tj T*
+(neighbours on Hill Road and near Bandra station report the exact) Tj T*
+(same total outage. We suspect the local cell tower has failed,) Tj T*
+(as the signal indicator shows no bars at all.) Tj T*
+() Tj T*
+(This outage is severely affecting work-from-home staff and local) Tj T*
+(businesses. Hundreds of users in the area appear to be impacted.) Tj T*
+(Please treat this as a critical, high-priority incident and send) Tj T*
+(a field engineering team to inspect the Bandra tower immediately.) Tj T*
+() Tj T*
+(Issue type: network outage / tower failure) Tj T*
+(Severity: critical) Tj T*
+(Location: Bandra West, Mumbai) Tj T*
+() Tj T*
+(Regards,) Tj T*
+(Rajesh Kumar) Tj T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1740
+%%EOF

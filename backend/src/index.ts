@@ -11,6 +11,10 @@ import { startWorkers } from './queue/worker'
 import { errorHandler } from './middleware/errorHandler'
 import authRouter from './routes/auth'
 import ingestRouter from './routes/ingest'
+import complaintsRouter from './routes/complaints'
+import towersRouter from './routes/towers'
+import alertsRouter from './routes/alerts'
+import recommendationsRouter from './routes/recommendations'
 
 const app = express()
 const httpServer = createServer(app)
@@ -24,8 +28,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'drishti-backend' })
 })
 
-app.use('/auth', authRouter)
-app.use('/ingest', ingestRouter)
+app.use('/auth',            authRouter)
+app.use('/ingest',          ingestRouter)
+app.use('/complaints',      complaintsRouter)
+app.use('/towers',          towersRouter)
+app.use('/alerts',          alertsRouter)
+app.use('/recommendations', recommendationsRouter)
 
 // ── Global error handler (must be last) ─────────────────
 app.use(errorHandler)
@@ -34,14 +42,15 @@ app.use(errorHandler)
 const PORT = process.env.PORT ?? 4000
 
 async function bootstrap(): Promise<void> {
-  await runMigrations()       // create all tables
-  await initQdrant()          // create vector collection
-  await seedTowers()          // 20 mock towers
-  await seedOperator()        // default admin
-  startWorkers()              // BullMQ workers (async, non-blocking)
+  await runMigrations()
+  await initQdrant()
+  await seedTowers()
+  await seedOperator()
+  startWorkers()
 
   httpServer.listen(PORT, () => {
     logger.info(`Drishti backend running on port ${PORT}`)
+    logger.info(`Routes: /health /auth /ingest /complaints /towers /alerts /recommendations`)
   })
 }
 

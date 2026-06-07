@@ -1,5 +1,6 @@
 import { Worker, type ConnectionOptions } from 'bullmq'
 import { runIngestionAgent } from '../agents/ingestionAgent'
+import { runPatternAgent } from '../agents/patternAgent'
 import { logger } from '../utils/logger'
 import type { IngestJobData } from './jobs/ingestJob'
 import type { SourceType } from '../rag/chunker'
@@ -9,8 +10,11 @@ export const redisConnection: ConnectionOptions = {
   url: process.env.REDIS_URL ?? 'redis://localhost:6379',
 }
 
-// ── Ingestion worker ───────────────────────────────────────────────────────
+let ingestCount = 0   // trigger pattern agent every 10 ingestions
+
 export function startWorkers(): void {
+
+  // ── Ingest worker ──────────────────────────────────────────────────────
   const ingestWorker = new Worker<IngestJobData>(
     'ingest',
     async (job) => {
@@ -18,10 +22,18 @@ export function startWorkers(): void {
       logger.info(`Processing ingest job ${job.id} — complaint ${complaintId}`)
 
       await runIngestionAgent(complaintId, rawText, source as SourceType)
+
+      // Every 10 complaints, trigger pattern analysis
+      ingestCount++
+      if (ingestCount % 10 === 0) {
+        const { addPatternJob } = await import('./jobs/patternJob')
+        await addPatternJob()
+        logger.info('Pattern job triggered after 10 ingestions')
+      }
     },
     {
       connection: redisConnection,
-      concurrency: 3,    // process up to 3 complaints at once
+      concurrency: 3,
     }
   )
 
@@ -33,5 +45,26 @@ export function startWorkers(): void {
     logger.error(`Ingest job ${job?.id} failed: ${err.message}`)
   })
 
-  logger.info('BullMQ workers started.')
+  // ── Pattern worker ─────────────────────────────────────────────────────
+  const patternWorker = new Worker(
+    'pattern',
+    async (job) => {
+      logger.info(`Processing pattern job ${job.id}`)
+      await runPatternAgent()
+    },
+    {
+      connection: redisConnection,
+      concurrency: 1,   // only one pattern analysis at a time
+    }
+  )
+
+  patternWorker.on('completed', (job) => {
+    logger.info(`Pattern job ${job.id} completed`)
+  })
+
+  patternWorker.on('failed', (job, err) => {
+    logger.error(`Pattern job ${job?.id} failed: ${err.message}`)
+  })
+
+  logger.info('BullMQ workers started (ingest + pattern).')
 }

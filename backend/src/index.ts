@@ -8,6 +8,7 @@ import { seedTowers } from './db/seed'
 import { seedOperator } from './db/seedOperator'
 import { errorHandler } from './middleware/errorHandler'
 import authRouter from './routes/auth'
+import ingestRouter from './routes/ingest'
 
 const app = express()
 const httpServer = createServer(app)
@@ -22,6 +23,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/auth', authRouter)
+app.use('/ingest', ingestRouter)
 
 // ── Global error handler (must be last) ─────────────────
 app.use(errorHandler)

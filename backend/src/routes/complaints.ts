@@ -1,9 +1,50 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { query } from '../db/postgres'
+import { emitComplaintResolved, emitTowerStatusChanged } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
+
+// PATCH /complaints/:id/resolve — one-click resolve a single complaint.
+// Marks it resolved and decrements its tower's active count; if that tower
+// has no active complaints left, restores it to operational.
+router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await query<{ id: string; tower_id: string | null }>(
+      `UPDATE complaints SET status = 'resolved'
+       WHERE id = $1 AND status != 'resolved'
+       RETURNING id, tower_id`,
+      [req.params.id]
+    )
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'Complaint not found or already resolved' })
+      return
+    }
+
+    const towerId = rows[0].tower_id
+    if (towerId) {
+      const tw = await query<{ active_complaints: number }>(
+        `UPDATE towers
+         SET active_complaints = GREATEST(active_complaints - 1, 0)
+         WHERE id = $1 RETURNING active_complaints`,
+        [towerId]
+      )
+      // No active complaints left → tower back to operational
+      if (tw[0] && tw[0].active_complaints === 0) {
+        await query(`UPDATE towers SET status = 'operational' WHERE id = $1`, [towerId])
+        emitTowerStatusChanged(towerId, 'operational')
+      }
+    }
+
+    emitComplaintResolved(rows[0].id)
+    logger.info(`Complaint ${rows[0].id} resolved`)
+    res.json({ ok: true })
+  } catch (err) {
+    logger.error(`PATCH /complaints/:id/resolve error: ${String(err)}`)
+    res.status(500).json({ error: 'Failed to resolve complaint' })
+  }
+})
 
 // GET /complaints — paginated list with filters
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {

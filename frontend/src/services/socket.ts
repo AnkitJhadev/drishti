@@ -39,6 +39,10 @@ export function connectSocket(token: string): void {
   socket.on('tower:status:changed', (data: { tower_id: string; status: TowerStatus }) => {
     useTowersStore.getState().updateTowerStatus(data.tower_id, data.status)
   })
+
+  socket.on('complaint:resolved', (data: { id: string }) => {
+    useComplaintsStore.getState().resolveComplaint(data.id)
+  })
 }
 
 export function disconnectSocket(): void {

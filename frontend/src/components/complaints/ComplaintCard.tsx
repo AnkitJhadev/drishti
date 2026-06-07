@@ -1,4 +1,7 @@
+import { useState } from 'react'
 import type { EnrichedComplaint, Severity } from '../../types/complaint'
+import { useComplaintsStore } from '../../stores/complaintsStore'
+import api from '../../services/api'
 
 const SEVERITY_STYLE: Record<Severity, { bg: string; text: string }> = {
   low:      { bg: '#374151', text: '#9ca3af' },
@@ -32,13 +35,28 @@ interface Props {
 export default function ComplaintCard({ complaint }: Props) {
   const sev = SEVERITY_STYLE[complaint.severity] ?? SEVERITY_STYLE.low
   const isPending = complaint.status === 'pending'
+  const isResolved = complaint.status === 'resolved'
+  const accent = isResolved ? '#10b981' : sev.text
 
-  const accent = sev.text
+  const resolveInStore = useComplaintsStore((s) => s.resolveComplaint)
+  const [busy, setBusy] = useState(false)
+
+  async function resolve() {
+    setBusy(true)
+    resolveInStore(complaint.id) // optimistic
+    try {
+      await api.patch(`/complaints/${complaint.id}/resolve`)
+    } catch {
+      // socket/refresh will reconcile
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div
-      className="dr-card dr-fade-in px-3 py-2.5 mb-2 relative overflow-hidden"
-      style={{ borderLeft: `3px solid ${accent}` }}
+      className="dr-card dr-fade-in px-3 py-2.5 mb-2 relative overflow-hidden group"
+      style={{ borderLeft: `3px solid ${accent}`, opacity: isResolved ? 0.65 : 1 }}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -47,12 +65,18 @@ export default function ComplaintCard({ complaint }: Props) {
             {complaint.location_hint || 'Unknown location'}
           </span>
         </div>
-        <span
-          className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium uppercase"
-          style={{ background: sev.bg, color: sev.text }}
-        >
-          {complaint.severity}
-        </span>
+        {isResolved ? (
+          <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: '#064e3b', color: '#6ee7b7' }}>
+            ✓ RESOLVED
+          </span>
+        ) : (
+          <span
+            className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium uppercase"
+            style={{ background: sev.bg, color: sev.text }}
+          >
+            {complaint.severity}
+          </span>
+        )}
       </div>
 
       <p className="text-sm mb-1.5 line-clamp-2" style={{ color: '#f9fafb' }}>
@@ -64,12 +88,23 @@ export default function ComplaintCard({ complaint }: Props) {
           {isPending ? (
             <span style={{ color: '#f59e0b' }}>● analyzing…</span>
           ) : (
-            <span style={{ color: '#9ca3af' }}>
-              {complaint.issue_type?.replace(/_/g, ' ') ?? 'unknown'}
-            </span>
+            <span style={{ color: '#9ca3af' }}>{complaint.issue_type?.replace(/_/g, ' ') ?? 'unknown'}</span>
           )}
         </span>
-        <span>{timeAgo(complaint.timestamp)}</span>
+        <div className="flex items-center gap-2">
+          <span>{timeAgo(complaint.timestamp)}</span>
+          {!isResolved && !isPending && (
+            <button
+              onClick={resolve}
+              disabled={busy}
+              className="px-2 py-0.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
+              style={{ background: '#10b981', color: '#0a0f1e' }}
+              title="Mark this complaint resolved"
+            >
+              {busy ? '…' : '✓ Resolve'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

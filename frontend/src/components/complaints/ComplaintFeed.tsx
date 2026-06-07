@@ -52,7 +52,7 @@ export default function ComplaintFeed() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-3">
-        {loading && (
+        {loading && complaints.length === 0 && (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="dr-skeleton" style={{ height: 64 }} />

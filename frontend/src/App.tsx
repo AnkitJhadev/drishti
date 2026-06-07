@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 
@@ -16,6 +16,17 @@ function Loading() {
 
 export default function App() {
   const token = useAuthStore((s) => s.token)
+
+  // Wait for the persisted auth (IndexedDB) to rehydrate before routing,
+  // so a reloaded session isn't bounced to /login.
+  const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated())
+  useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true))
+    if (useAuthStore.persist.hasHydrated()) setHydrated(true)
+    return unsub
+  }, [])
+
+  if (!hydrated) return <Loading />
 
   return (
     <BrowserRouter>

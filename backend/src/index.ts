@@ -8,6 +8,7 @@ import { initQdrant } from './db/qdrant'
 import { seedTowers } from './db/seed'
 import { seedOperator } from './db/seedOperator'
 import { startWorkers } from './queue/worker'
+import { initWebSocket } from './websocket/wsServer'
 import { errorHandler } from './middleware/errorHandler'
 import authRouter from './routes/auth'
 import ingestRouter from './routes/ingest'
@@ -46,6 +47,7 @@ async function bootstrap(): Promise<void> {
   await initQdrant()
   await seedTowers()
   await seedOperator()
+  initWebSocket(httpServer)
   startWorkers()
 
   httpServer.listen(PORT, () => {

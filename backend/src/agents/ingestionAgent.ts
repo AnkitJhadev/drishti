@@ -3,8 +3,9 @@ import { runAgent } from './agentRunner'
 import { query } from '../db/postgres'
 import { indexComplaint } from '../rag/indexer'
 import { geocodeLocation } from '../utils/geocoder'
+import { emitComplaintNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
-import type { IssueType, Severity } from '../types/complaint'
+import type { IssueType, Severity, EnrichedComplaint } from '../types/complaint'
 import type { SourceType } from '../rag/chunker'
 
 // ── Tool definitions ──────────────────────────────────────────────────────
@@ -110,6 +111,34 @@ function makeToolExecutor(complaintId: string, rawText: string, source: SourceTy
       )
 
       logger.info(`Complaint ${complaintId} classified — ${issue_type} / ${severity}`)
+
+      // Emit the enriched complaint to the live feed
+      const enriched = await query<{
+        id: string; source: string; raw_text: string; location_hint: string
+        lat: number; lng: number; sender: string; timestamp: string
+        status: string; issue_type: IssueType; severity: Severity; confidence: number
+      }>(
+        `SELECT id, source, raw_text, location_hint, lat, lng, sender,
+                timestamp, status, issue_type, severity, confidence
+         FROM complaints WHERE id = $1`,
+        [complaintId]
+      )
+      if (enriched[0]) {
+        const c = enriched[0]
+        emitComplaintNew({
+          id: c.id,
+          source: c.source as EnrichedComplaint['source'],
+          raw_text: c.raw_text,
+          location_hint: c.location_hint ?? '',
+          timestamp: c.timestamp,
+          sender: c.sender ?? 'unknown',
+          status: c.status as EnrichedComplaint['status'],
+          issue_type: c.issue_type,
+          severity: c.severity,
+          coordinates: [c.lat ?? 0, c.lng ?? 0],
+          confidence: c.confidence ?? 0,
+        })
+      }
       return { ok: true }
     }
 

@@ -8,6 +8,7 @@ import { parseEmail } from '../parsers/emailParser'
 import { geocodeLocation } from '../utils/geocoder'
 import { query } from '../db/postgres'
 import { addIngestJob } from '../queue/jobs/ingestJob'
+import { emitComplaintNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 import type { ComplaintSource } from '../types/complaint'
 
@@ -121,6 +122,21 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
           // Dispatch to BullMQ — agent will classify + embed async
           await addIngestJob({ complaintId: id, rawText: record.text, source })
           logger.info(`Complaint ingested + job queued — id: ${id}, source: ${source}`)
+
+          // Emit live to the dashboard feed immediately (pre-classification)
+          emitComplaintNew({
+            id,
+            source,
+            raw_text: record.text,
+            location_hint: record.locationHint ?? '',
+            timestamp: record.timestamp ?? new Date().toISOString(),
+            sender: record.sender ?? 'unknown',
+            status: 'pending',
+            issue_type: 'unknown',
+            severity: 'low',
+            coordinates: [coords?.[0] ?? 0, coords?.[1] ?? 0],
+            confidence: 0,
+          })
         }
       }
     }

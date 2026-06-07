@@ -13,7 +13,7 @@ export interface Alert {
   severity: AlertSeverity
   title: string
   message: string
-  timestamp: string
+  created_at: string
   read: boolean
   tower_id?: string
   cluster_id?: string

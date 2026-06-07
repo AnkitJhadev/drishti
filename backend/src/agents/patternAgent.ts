@@ -1,8 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
 import { query, withTransaction } from '../db/postgres'
+import {
+  emitRecommendationReady,
+  emitAlertNew,
+  emitTowerStatusChanged,
+} from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 import type { IssueType } from '../types/complaint'
+import type { TowerStatus } from '../types/tower'
+import type { AlertType, AlertSeverity } from '../types/alert'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface ComplaintRow {
@@ -269,12 +276,27 @@ async function toolExecutor(
 
     // Degrade tower status if priority is high/critical
     if (tower_id && (priority === 'high' || priority === 'critical')) {
-      const newStatus = priority === 'critical' ? 'critical' : 'degraded'
+      const newStatus: TowerStatus = priority === 'critical' ? 'critical' : 'degraded'
       await query(
         `UPDATE towers SET status = $1 WHERE id = $2 AND status = 'operational'`,
         [newStatus, tower_id]
       )
+      emitTowerStatusChanged(tower_id, newStatus)
     }
+
+    // Emit the recommendation live to the approval panel
+    emitRecommendationReady({
+      id: rows[0].id,
+      cluster_id,
+      tower_id: tower_id ?? '',
+      root_cause,
+      suggested_action,
+      affected_users,
+      priority,
+      confidence,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    })
 
     logger.info(`Recommendation created: ${rows[0].id} — priority: ${priority}`)
     return { ok: true, recommendation_id: rows[0].id }
@@ -291,11 +313,26 @@ async function toolExecutor(
       action_required: boolean
     }
 
-    await query(
+    const alertRows = await query<{ id: string; created_at: string }>(
       `INSERT INTO alerts (type, severity, title, message, tower_id, cluster_id, action_required)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, created_at`,
       [type, severity, title, message, tower_id ?? null, cluster_id ?? null, action_required]
     )
+
+    // Emit the alert live to the sidebar feed
+    emitAlertNew({
+      id: alertRows[0].id,
+      type: type as AlertType,
+      severity: severity as AlertSeverity,
+      title,
+      message,
+      tower_id,
+      cluster_id,
+      read: false,
+      action_required,
+      created_at: alertRows[0].created_at,
+    })
 
     logger.info(`Alert created — ${type} / ${severity}: ${title}`)
     return { ok: true }

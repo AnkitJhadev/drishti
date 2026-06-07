@@ -34,14 +34,16 @@ export default function Dashboard() {
     <Layout>
       <div className="p-3 space-y-3">
         {/* Map — full width, tall, expandable (Hour 8) */}
-        <DrishtiMap />
+        <div id="section-towers" style={{ scrollMarginTop: 12 }}>
+          <DrishtiMap />
+        </div>
 
         {/* Feed + Metrics side by side (Hours 7 & 9) */}
         <div className="grid gap-3 lg:grid-cols-2">
-          <div style={{ height: 400 }}>
+          <div id="section-complaints" style={{ height: 400, scrollMarginTop: 12 }}>
             <ComplaintFeed />
           </div>
-          <div style={{ height: 400 }}>
+          <div id="section-analytics" style={{ height: 400, scrollMarginTop: 12 }}>
             <AnalyticsPanel />
           </div>
         </div>

@@ -9,17 +9,27 @@ const SEVERITY_COLOR: Record<AlertSeverity, string> = {
   critical: '#ef4444',
 }
 
-const NAV_ITEMS = [
-  { icon: '◫', label: 'Dashboard', active: true },
-  { icon: '◉', label: 'Towers', active: false },
-  { icon: '☰', label: 'Complaints', active: false },
-  { icon: '◔', label: 'Analytics', active: false },
+const NAV_ITEMS: Array<{ icon: string; label: string; target: string | null }> = [
+  { icon: '◫', label: 'Dashboard', target: null },
+  { icon: '◉', label: 'Towers', target: 'section-towers' },
+  { icon: '☰', label: 'Complaints', target: 'section-complaints' },
+  { icon: '◔', label: 'Analytics', target: 'section-analytics' },
 ]
 
 export default function Sidebar() {
   const alerts = useAlertsStore((s) => s.alerts)
   const unread = alerts.filter((a) => !a.read).length
   const [ingestOpen, setIngestOpen] = useState(false)
+  const [active, setActive] = useState('Dashboard')
+
+  function go(item: { label: string; target: string | null }) {
+    setActive(item.label)
+    if (item.target) {
+      document.getElementById(item.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
 
   return (
     <aside
@@ -29,17 +39,20 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="p-2">
         {NAV_ITEMS.map((item) => (
-          <div
+          <button
             key={item.label}
-            className="flex items-center gap-3 px-3 py-2 rounded mb-1 cursor-pointer text-sm transition-colors"
+            onClick={() => go(item)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded mb-1 cursor-pointer text-sm transition-colors text-left"
             style={{
-              background: item.active ? '#1a2235' : 'transparent',
-              color: item.active ? '#f59e0b' : '#9ca3af',
+              background: active === item.label ? '#1a2235' : 'transparent',
+              color: active === item.label ? '#f59e0b' : '#9ca3af',
             }}
+            onMouseEnter={(e) => { if (active !== item.label) e.currentTarget.style.background = '#161e2e' }}
+            onMouseLeave={(e) => { if (active !== item.label) e.currentTarget.style.background = 'transparent' }}
           >
             <span>{item.icon}</span>
             <span>{item.label}</span>
-          </div>
+          </button>
         ))}
 
         {/* Ingest button */}

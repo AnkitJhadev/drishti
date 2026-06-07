@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import ErrorBoundary from '../ErrorBoundary'
 
 const OntologyGraph = lazy(() => import('./OntologyGraph'))
 
@@ -20,9 +21,11 @@ export default function OntologyModal({ open, onClose }: Props) {
           <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
         <div className="flex-1 overflow-hidden rounded-b-lg">
-          <Suspense fallback={<div className="h-full flex items-center justify-center text-xs" style={{ color: '#6b7280' }}>Loading graph…</div>}>
-            <OntologyGraph />
-          </Suspense>
+          <ErrorBoundary compact area="Ontology graph">
+            <Suspense fallback={<div className="h-full flex items-center justify-center text-xs" style={{ color: '#6b7280' }}>Loading graph…</div>}>
+              <OntologyGraph />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     </div>

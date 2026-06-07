@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import ErrorBoundary from '../ErrorBoundary'
 
 // Heavy (Three.js ~600KB) — lazy-loaded so it never touches initial load.
 const TowerScene = lazy(() => import('./TowerScene'))
@@ -22,9 +23,11 @@ export default function ThreeDModal({ open, onClose }: Props) {
           <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
         <div className="flex-1 overflow-hidden rounded-b-lg">
-          <Suspense fallback={<div className="h-full flex items-center justify-center text-xs" style={{ color: '#6b7280' }}>Loading 3D engine…</div>}>
-            <TowerScene />
-          </Suspense>
+          <ErrorBoundary compact area="3D view">
+            <Suspense fallback={<div className="h-full flex items-center justify-center text-xs" style={{ color: '#6b7280' }}>Loading 3D engine…</div>}>
+              <TowerScene />
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
     </div>

@@ -64,7 +64,15 @@ export default function TowerScene() {
     <Canvas camera={{ position: [0, 26, 32], fov: 50 }} style={{ background: '#0a0f1e' }}>
       <ambientLight intensity={0.5} />
       <directionalLight position={[15, 25, 10]} intensity={0.9} />
-      <Grid args={[SPAN, SPAN]} cellColor="#1f2937" sectionColor="#374151" fadeDistance={70} infiniteGrid position={[0, 0, 0]} />
+      <Grid
+        infiniteGrid
+        cellSize={2}
+        cellColor="#1f2937"
+        sectionSize={10}
+        sectionColor="#374151"
+        fadeDistance={70}
+        position={[0, 0, 0]}
+      />
       {towers.map((t) => <TowerPillar key={t.id} tower={t} />)}
       <OrbitControls enablePan enableZoom enableRotate minDistance={8} maxDistance={70} />
     </Canvas>

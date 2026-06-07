@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+import ErrorBoundary from './components/ErrorBoundary'
 
 // Route-level code splitting — Login loads without the heavy map/chart libs.
 const Login = lazy(() => import('./pages/Login'))
@@ -29,17 +30,19 @@ export default function App() {
   if (!hydrated) return <Loading />
 
   return (
-    <BrowserRouter>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={token ? <Dashboard /> : <Navigate to="/login" replace />}
-          />
-          <Route path="*" element={<Navigate to={token ? '/dashboard' : '/login'} replace />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={token ? <Dashboard /> : <Navigate to="/login" replace />}
+            />
+            <Route path="*" element={<Navigate to={token ? '/dashboard' : '/login'} replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

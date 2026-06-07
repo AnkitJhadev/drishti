@@ -18,8 +18,8 @@ export default function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail]       = useState('admin@drishti.com')
+  const [password, setPassword] = useState('drishti@123')
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
@@ -159,14 +159,6 @@ export default function Login() {
             </button>
 
           </form>
-        </div>
-
-        {/* Demo credentials hint */}
-        <div className="mt-4 px-4 py-3 rounded text-xs text-center"
-          style={{ background: '#111827', border: '1px solid #1f2937', color: '#6b7280' }}>
-          Demo — <span style={{ color: '#9ca3af' }}>admin@drishti.com</span>
-          {' / '}
-          <span style={{ color: '#9ca3af' }}>drishti@123</span>
         </div>
 
         <p className="text-center mt-6 text-xs" style={{ color: '#374151' }}>

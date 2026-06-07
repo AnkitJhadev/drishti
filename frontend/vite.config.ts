@@ -43,5 +43,20 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
-  }
+  },
+  build: {
+    // Split heavy libs into separate cacheable chunks — better for
+    // low-bandwidth / repeat loads on old hardware (Chanakya environments).
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          leaflet: ['leaflet', 'react-leaflet', 'leaflet.heat'],
+          charts: ['recharts'],
+          net: ['axios', 'socket.io-client'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
 })

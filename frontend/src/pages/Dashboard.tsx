@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import Layout from '../components/layout/Layout'
 import DrishtiMap from '../components/map/DrishtiMap'
 import StatsBar from '../components/analytics/StatsBar'
-import AnalyticsPanel from '../components/analytics/AnalyticsPanel'
 import ComplaintFeed from '../components/complaints/ComplaintFeed'
 import NLQueryChat from '../components/ai/NLQueryChat'
 import ApprovalPanel from '../components/approval/ApprovalPanel'
+
+// Defer the heavy charts (recharts) chunk so map + feed paint first.
+const AnalyticsPanel = lazy(() => import('../components/analytics/AnalyticsPanel'))
+
+function PanelSkeleton() {
+  return <div className="dr-skeleton h-full w-full rounded-lg" />
+}
 import { useComplaints } from '../hooks/useComplaints'
 import { useTowers } from '../hooks/useTowers'
 import { useAlerts } from '../hooks/useAlerts'
@@ -48,7 +54,9 @@ export default function Dashboard() {
             <ComplaintFeed />
           </div>
           <div id="section-analytics" style={{ height: 400, scrollMarginTop: 12 }}>
-            <AnalyticsPanel />
+            <Suspense fallback={<PanelSkeleton />}>
+              <AnalyticsPanel />
+            </Suspense>
           </div>
         </div>
 

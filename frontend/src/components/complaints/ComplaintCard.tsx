@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import type { EnrichedComplaint, Severity } from '../../types/complaint'
-import ComplaintDetailModal from './ComplaintDetailModal'
+
+const ComplaintDetailModal = lazy(() => import('./ComplaintDetailModal'))
 
 const SEVERITY_STYLE: Record<Severity, { bg: string; text: string }> = {
   low:      { bg: '#374151', text: '#9ca3af' },
@@ -75,7 +76,11 @@ export default function ComplaintCard({ complaint }: Props) {
         </div>
       </div>
 
-      {open && <ComplaintDetailModal complaintId={complaint.id} onClose={() => setOpen(false)} />}
+      {open && (
+        <Suspense fallback={null}>
+          <ComplaintDetailModal complaintId={complaint.id} onClose={() => setOpen(false)} />
+        </Suspense>
+      )}
     </>
   )
 }

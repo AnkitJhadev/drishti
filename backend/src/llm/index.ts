@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
 import { groqClient, GROQ_MODEL } from './groq'
 import { togetherClient, TOGETHER_MODEL } from './together'
+import { runGeminiTools } from './gemini'
 import { routeFor, type AgentTask, type Provider } from './router'
 import { logger } from '../utils/logger'
 
@@ -117,7 +118,10 @@ async function runOnProvider(
 
 // A provider is usable only if its API key is actually configured.
 function hasKey(provider: Provider): boolean {
-  const key = provider === 'together' ? process.env.TOGETHER_API_KEY : process.env.GROQ_API_KEY
+  const key =
+    provider === 'together' ? process.env.TOGETHER_API_KEY
+    : provider === 'gemini' ? process.env.GEMINI_API_KEY
+    : process.env.GROQ_API_KEY
   return Boolean(key && !key.startsWith('your-'))
 }
 
@@ -138,6 +142,9 @@ export async function runLLMAgent(
 
   for (const provider of chain) {
     try {
+      if (provider === 'gemini') {
+        return await runGeminiTools(systemPrompt, userMessage, tools, toolExecutor, opts)
+      }
       return await runOnProvider(provider, systemPrompt, userMessage, tools, toolExecutor, opts)
     } catch (err) {
       lastError = err

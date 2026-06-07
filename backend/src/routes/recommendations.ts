@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
-import { query } from '../db/postgres'
+import { query, withTransaction } from '../db/postgres'
 import { runApprovalAgent } from '../agents/approvalAgent'
+import { emitTowerStatusChanged, emitAlertNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -136,6 +137,72 @@ router.patch('/:id/escalate', requireAuth, async (req: Request, res: Response): 
   } catch (err) {
     logger.error(`PATCH /recommendations/:id/escalate error: ${String(err)}`)
     res.status(500).json({ error: 'Failed to escalate recommendation' })
+  }
+})
+
+// PATCH /recommendations/:id/resolve — close the loop: resolve cluster,
+// mark its complaints resolved, restore the tower to operational.
+router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const operator = req.operator!
+
+    const recs = await query<{ id: string; tower_id: string | null; cluster_id: string | null }>(
+      `SELECT id, tower_id, cluster_id FROM recommendations WHERE id = $1`,
+      [req.params.id]
+    )
+    if (recs.length === 0) {
+      res.status(404).json({ error: 'Recommendation not found' })
+      return
+    }
+    const rec = recs[0]
+
+    await withTransaction(async (client) => {
+      // Resolution ticket → resolved
+      await client.query(
+        `UPDATE resolutions SET status = 'resolved', resolved_at = NOW()
+         WHERE recommendation_id = $1`,
+        [rec.id]
+      )
+      // Cluster → resolved + its complaints → resolved
+      if (rec.cluster_id) {
+        await client.query(`UPDATE clusters SET status = 'resolved', updated_at = NOW() WHERE id = $1`, [rec.cluster_id])
+        await client.query(`UPDATE complaints SET status = 'resolved' WHERE cluster_id = $1`, [rec.cluster_id])
+      }
+      // Tower → operational, counters reset
+      if (rec.tower_id) {
+        await client.query(
+          `UPDATE towers SET status = 'operational', active_complaints = 0,
+           affected_users = 0, last_checked = NOW() WHERE id = $1`,
+          [rec.tower_id]
+        )
+      }
+    })
+
+    // Live updates
+    if (rec.tower_id) emitTowerStatusChanged(rec.tower_id, 'operational')
+    const alertRows = await query<{ id: string; created_at: string }>(
+      `INSERT INTO alerts (type, severity, title, message, tower_id, action_required)
+       VALUES ('recommendation_ready', 'info', 'Incident Resolved', $1, $2, FALSE)
+       RETURNING id, created_at`,
+      [`Incident resolved by ${operator.email}. Tower restored to operational.`, rec.tower_id ?? null]
+    )
+    emitAlertNew({
+      id: alertRows[0].id,
+      type: 'recommendation_ready',
+      severity: 'info',
+      title: 'Incident Resolved',
+      message: `Incident resolved by ${operator.email}. Tower restored to operational.`,
+      tower_id: rec.tower_id ?? undefined,
+      read: false,
+      action_required: false,
+      created_at: alertRows[0].created_at,
+    })
+
+    logger.info(`Recommendation ${rec.id} resolved by ${operator.email}`)
+    res.json({ ok: true })
+  } catch (err) {
+    logger.error(`PATCH /recommendations/:id/resolve error: ${String(err)}`)
+    res.status(500).json({ error: 'Failed to resolve' })
   }
 })
 

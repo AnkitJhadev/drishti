@@ -12,10 +12,13 @@ export function useRecommendations(): void {
 
   useEffect(() => {
     let active = true
-    api
-      .get<RecsResponse>('/recommendations', { params: { status: 'pending' } })
-      .then(({ data }) => {
-        if (active) setRecommendations(data.recommendations)
+    // Load both pending (to approve) and approved (in progress, to resolve)
+    Promise.all([
+      api.get<RecsResponse>('/recommendations', { params: { status: 'pending' } }),
+      api.get<RecsResponse>('/recommendations', { params: { status: 'approved' } }),
+    ])
+      .then(([p, a]) => {
+        if (active) setRecommendations([...p.data.recommendations, ...a.data.recommendations])
       })
       .catch(() => undefined)
     return () => {

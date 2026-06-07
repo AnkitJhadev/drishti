@@ -1,8 +1,10 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 
+// Dev: '/api' is proxied to localhost:4000 by Vite.
+// Prod: set VITE_API_URL to the deployed backend origin (e.g. Render URL).
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api',
   timeout: 30000,
 })
 

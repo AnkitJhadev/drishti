@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useAlertsStore } from '../../stores/alertsStore'
+import IngestionPanel from '../complaints/IngestionPanel'
 import type { AlertSeverity } from '../../types/alert'
 
 const SEVERITY_COLOR: Record<AlertSeverity, string> = {
@@ -17,6 +19,7 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const alerts = useAlertsStore((s) => s.alerts)
   const unread = alerts.filter((a) => !a.read).length
+  const [ingestOpen, setIngestOpen] = useState(false)
 
   return (
     <aside
@@ -38,7 +41,19 @@ export default function Sidebar() {
             <span>{item.label}</span>
           </div>
         ))}
+
+        {/* Ingest button */}
+        <button
+          onClick={() => setIngestOpen(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded mt-2 text-sm font-semibold transition-transform hover:scale-[1.02]"
+          style={{ background: '#f59e0b', color: '#0a0f1e' }}
+        >
+          <span>＋</span>
+          <span>Ingest Complaints</span>
+        </button>
       </nav>
+
+      <IngestionPanel open={ingestOpen} onClose={() => setIngestOpen(false)} />
 
       {/* Alerts feed */}
       <div className="flex-1 overflow-hidden flex flex-col" style={{ borderTop: '1px solid #1f2937' }}>

@@ -50,7 +50,17 @@ export async function withTransaction<T>(
 // ── Run migrations ──────────────────────────────────────────────────────────
 export async function runMigrations(): Promise<void> {
   logger.info('Running database migrations...')
-  const sqlPath = path.join(__dirname, 'migrations', '001_init.sql')
+  // Resolve SQL in both dev (ts-node → src) and prod (compiled → dist, where
+  // tsc does not copy .sql files, so fall back to the src tree).
+  const candidates = [
+    path.join(__dirname, 'migrations', '001_init.sql'),
+    path.join(process.cwd(), 'src', 'db', 'migrations', '001_init.sql'),
+    path.join(__dirname, '..', '..', 'src', 'db', 'migrations', '001_init.sql'),
+  ]
+  const sqlPath = candidates.find((p) => fs.existsSync(p))
+  if (!sqlPath) {
+    throw new Error(`Migration SQL not found. Looked in: ${candidates.join(', ')}`)
+  }
   const sql = fs.readFileSync(sqlPath, 'utf-8')
   await query(sql)
   logger.info('Migrations complete.')

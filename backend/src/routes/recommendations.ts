@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { query } from '../db/postgres'
+import { runApprovalAgent } from '../agents/approvalAgent'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -76,6 +77,12 @@ router.patch('/:id/approve', requireAuth, async (req: Request, res: Response): P
     )
 
     logger.info(`Recommendation ${rec.id} approved by ${operator.email}`)
+
+    // Best-effort AI follow-up (Agent 4) — never blocks the response
+    runApprovalAgent(rec.id, 'approved').catch((e) =>
+      logger.warn(`Approval agent skipped: ${String(e)}`)
+    )
+
     res.json({ ok: true })
   } catch (err) {
     logger.error(`PATCH /recommendations/:id/approve error: ${String(err)}`)

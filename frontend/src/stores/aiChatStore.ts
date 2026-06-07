@@ -6,6 +6,7 @@ interface AIChatState {
   recommendations: AIRecommendation[]
   loading: boolean
   addMessage: (message: ChatMessage) => void
+  setRecommendations: (recommendations: AIRecommendation[]) => void
   addRecommendation: (recommendation: AIRecommendation) => void
   updateRecommendationStatus: (
     id: string,
@@ -21,6 +22,7 @@ export const useAIChatStore = create<AIChatState>((set) => ({
   loading: false,
   addMessage: (message) =>
     set((s) => ({ messages: [...s.messages, message] })),
+  setRecommendations: (recommendations) => set({ recommendations }),
   addRecommendation: (recommendation) =>
     set((s) => ({ recommendations: [recommendation, ...s.recommendations] })),
   updateRecommendationStatus: (id, status, operator_note) =>

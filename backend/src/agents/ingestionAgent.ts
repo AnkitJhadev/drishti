@@ -8,6 +8,22 @@ import { logger } from '../utils/logger'
 import type { IssueType, Severity, EnrichedComplaint } from '../types/complaint'
 import type { SourceType } from '../rag/chunker'
 
+// ── Normalizers — coerce loose LLM output to strict enums ─────────────────
+const ISSUE_TYPES: IssueType[] = [
+  'network_outage', 'call_drop', 'slow_internet', 'tower_failure', 'billing_issue', 'unknown',
+]
+const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']
+
+function normalizeIssueType(value: string): IssueType {
+  const slug = (value ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_')
+  return (ISSUE_TYPES as string[]).includes(slug) ? (slug as IssueType) : 'unknown'
+}
+
+function normalizeSeverity(value: string): Severity {
+  const slug = (value ?? '').toLowerCase().trim()
+  return (SEVERITIES as string[]).includes(slug) ? (slug as Severity) : 'medium'
+}
+
 // ── Tool definitions ──────────────────────────────────────────────────────
 const TOOLS: Anthropic.Tool[] = [
   {
@@ -78,13 +94,18 @@ function makeToolExecutor(complaintId: string, rawText: string, source: SourceTy
     }
 
     if (name === 'save_complaint') {
-      const { issue_type, severity, confidence, location_hint } = input as {
+      const raw = input as {
         complaint_id: string
-        issue_type: IssueType
-        severity: Severity
+        issue_type: string
+        severity: string
         confidence: number
         location_hint?: string
       }
+      // Normalize loose LLM output → strict enum values the UI expects
+      const issue_type = normalizeIssueType(raw.issue_type)
+      const severity = normalizeSeverity(raw.severity)
+      const confidence = raw.confidence
+      const location_hint = raw.location_hint
 
       // Geocode if a location hint was extracted
       const coords = location_hint ? geocodeLocation(location_hint) : null

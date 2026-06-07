@@ -76,6 +76,12 @@ async function runOnProvider(
   return ''
 }
 
+// A provider is usable only if its API key is actually configured.
+function hasKey(provider: Provider): boolean {
+  const key = provider === 'together' ? process.env.TOGETHER_API_KEY : process.env.GROQ_API_KEY
+  return Boolean(key && !key.startsWith('your-'))
+}
+
 // Public entry — runs an agent task with automatic provider fallback.
 export async function runLLMAgent(
   task: AgentTask,
@@ -84,7 +90,10 @@ export async function runLLMAgent(
   tools: Anthropic.Tool[],
   toolExecutor: ToolExecutor
 ): Promise<string> {
-  const chain = routeFor(task)
+  const chain = routeFor(task).filter(hasKey)
+  if (chain.length === 0) {
+    throw new Error('No LLM provider configured. Set GROQ_API_KEY in .env')
+  }
   let lastError: unknown
 
   for (const provider of chain) {

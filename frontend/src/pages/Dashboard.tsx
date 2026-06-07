@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Layout from '../components/layout/Layout'
 import DrishtiMap from '../components/map/DrishtiMap'
+import StatsBar from '../components/analytics/StatsBar'
 import AnalyticsPanel from '../components/analytics/AnalyticsPanel'
 import ComplaintFeed from '../components/complaints/ComplaintFeed'
 import NLQueryChat from '../components/ai/NLQueryChat'
@@ -33,6 +34,9 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="p-3 space-y-3" style={{ paddingBottom: 88 }}>
+        {/* KPI strip */}
+        <StatsBar />
+
         {/* Map — full width, tall, expandable (Hour 8) */}
         <div id="section-towers" style={{ scrollMarginTop: 12 }}>
           <DrishtiMap />

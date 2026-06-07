@@ -362,7 +362,7 @@ Be specific and actionable. Reference tower IDs and complaint counts in your rea
 
   const userMessage = 'Analyze recent complaint patterns, detect clusters, correlate to towers, and generate recommendations.'
 
-  await runAgent(systemPrompt, userMessage, TOOLS, toolExecutor)
+  await runAgent(systemPrompt, userMessage, TOOLS, toolExecutor, 'pattern')
 
   logger.info('Pattern agent complete')
 }

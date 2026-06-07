@@ -128,6 +128,6 @@ Root cause: ${rec.root_cause}
 Suggested action: ${rec.suggested_action}
 Priority: ${rec.priority}`
 
-  await runAgent(systemPrompt, userMessage, TOOLS, toolExecutor)
+  await runAgent(systemPrompt, userMessage, TOOLS, toolExecutor, 'approval')
   logger.info(`Approval agent completed follow-up for ${recommendationId} (${decision})`)
 }

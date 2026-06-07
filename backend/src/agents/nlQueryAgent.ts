@@ -154,7 +154,7 @@ Guidelines:
   say so plainly — never invent towers, numbers, or incidents.
 - Be concise and operational. Reference tower IDs (e.g. T-105) and real counts.`
 
-  const answer = await runAgent(systemPrompt, question, TOOLS, makeExecutor(ctx))
+  const answer = await runAgent(systemPrompt, question, TOOLS, makeExecutor(ctx), 'nl_query')
 
   return {
     answer,

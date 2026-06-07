@@ -192,7 +192,8 @@ If a location is mentioned (city, area, neighborhood), extract it.`
     systemPrompt,
     userMessage,
     TOOLS,
-    makeToolExecutor(complaintId, rawText, source)
+    makeToolExecutor(complaintId, rawText, source),
+    'classify'
   )
 
   logger.info(`Ingestion agent complete for complaint ${complaintId}`)

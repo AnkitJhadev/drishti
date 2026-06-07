@@ -1,0 +1,41 @@
+import { io, Socket } from 'socket.io-client'
+import { useComplaintsStore } from '../stores/complaintsStore'
+import { useAlertsStore } from '../stores/alertsStore'
+import { useAIChatStore } from '../stores/aiChatStore'
+import { useTowersStore } from '../stores/towersStore'
+import type { EnrichedComplaint } from '../types/complaint'
+import type { Alert } from '../types/alert'
+import type { AIRecommendation } from '../types/ai'
+import type { TowerStatus } from '../types/tower'
+
+let socket: Socket | null = null
+
+export function connectSocket(token: string): void {
+  if (socket?.connected) return
+
+  socket = io(import.meta.env.VITE_API_URL ?? 'http://localhost:4000', {
+    auth: { token },
+    transports: ['websocket'],
+  })
+
+  socket.on('complaint:new', (data: { complaint: EnrichedComplaint }) => {
+    useComplaintsStore.getState().addComplaint(data.complaint)
+  })
+
+  socket.on('alert:new', (data: { alert: Alert }) => {
+    useAlertsStore.getState().addAlert(data.alert)
+  })
+
+  socket.on('recommendation:ready', (data: { recommendation: AIRecommendation }) => {
+    useAIChatStore.getState().addRecommendation(data.recommendation)
+  })
+
+  socket.on('tower:status:changed', (data: { tower_id: string; status: TowerStatus }) => {
+    useTowersStore.getState().updateTowerStatus(data.tower_id, data.status)
+  })
+}
+
+export function disconnectSocket(): void {
+  socket?.disconnect()
+  socket = null
+}

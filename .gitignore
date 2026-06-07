@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (local)
+postgres_data/
+qdrant_data/
+
+# Vite
+frontend/.vite/
+
+# PWA
+frontend/public/sw.js
+frontend/public/workbox-*.js

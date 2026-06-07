@@ -38,7 +38,8 @@ export function startWorkers(): void {
     },
     {
       connection: redisConnection,
-      concurrency: 3,
+      concurrency: 1, // serial — free LLM tiers have low rate limits
+      limiter: { max: 4, duration: 60_000 }, // ≤4 complaints/min (Groq free TPM)
     }
   )
 

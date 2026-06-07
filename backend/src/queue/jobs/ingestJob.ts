@@ -10,9 +10,9 @@ export interface IngestJobData {
 export const ingestQueue = new Queue<IngestJobData>('ingest', {
   connection: redisConnection,
   defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 2000 },
-    removeOnComplete: 100,   // keep last 100 completed jobs
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 8000 }, // 8s,16s,32s… rides out rate limits
+    removeOnComplete: 100,
     removeOnFail: 200,
   },
 })

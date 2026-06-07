@@ -4,8 +4,10 @@ import cors from 'cors'
 import { createServer } from 'http'
 import { logger } from './utils/logger'
 import { runMigrations } from './db/postgres'
+import { initQdrant } from './db/qdrant'
 import { seedTowers } from './db/seed'
 import { seedOperator } from './db/seedOperator'
+import { startWorkers } from './queue/worker'
 import { errorHandler } from './middleware/errorHandler'
 import authRouter from './routes/auth'
 import ingestRouter from './routes/ingest'
@@ -32,9 +34,11 @@ app.use(errorHandler)
 const PORT = process.env.PORT ?? 4000
 
 async function bootstrap(): Promise<void> {
-  await runMigrations()
-  await seedTowers()
-  await seedOperator()
+  await runMigrations()       // create all tables
+  await initQdrant()          // create vector collection
+  await seedTowers()          // 20 mock towers
+  await seedOperator()        // default admin
+  startWorkers()              // BullMQ workers (async, non-blocking)
 
   httpServer.listen(PORT, () => {
     logger.info(`Drishti backend running on port ${PORT}`)

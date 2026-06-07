@@ -7,6 +7,7 @@ import { parseImage } from '../parsers/imageParser'
 import { parseEmail } from '../parsers/emailParser'
 import { geocodeLocation } from '../utils/geocoder'
 import { query } from '../db/postgres'
+import { addIngestJob } from '../queue/jobs/ingestJob'
 import { logger } from '../utils/logger'
 import type { ComplaintSource } from '../types/complaint'
 
@@ -115,8 +116,12 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
         )
 
         const id = rows[0]?.id
-        if (id) inserted.push(id)
-        logger.info(`Complaint ingested — id: ${id}, source: ${source}`)
+        if (id) {
+          inserted.push(id)
+          // Dispatch to BullMQ — agent will classify + embed async
+          await addIngestJob({ complaintId: id, rawText: record.text, source })
+          logger.info(`Complaint ingested + job queued — id: ${id}, source: ${source}`)
+        }
       }
     }
 

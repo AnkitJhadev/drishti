@@ -69,13 +69,11 @@ export default function NLQueryChat() {
   }
 
   return (
-    <div className="h-full flex flex-col rounded" style={{ background: '#111827', border: '1px solid #1f2937' }}>
+    <div className="dr-panel h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid #1f2937' }}>
         <span style={{ color: '#f59e0b' }}>✦</span>
-        <span className="text-sm font-semibold" style={{ color: '#f9fafb' }}>
-          Ask Drishti
-        </span>
+        <span className="dr-title">Ask Drishti</span>
         <span className="text-xs" style={{ color: '#6b7280' }}>
           AI network assistant
         </span>

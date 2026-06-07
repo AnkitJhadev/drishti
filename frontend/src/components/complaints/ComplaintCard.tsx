@@ -33,10 +33,12 @@ export default function ComplaintCard({ complaint }: Props) {
   const sev = SEVERITY_STYLE[complaint.severity] ?? SEVERITY_STYLE.low
   const isPending = complaint.status === 'pending'
 
+  const accent = sev.text
+
   return (
     <div
-      className="px-3 py-2.5 rounded mb-2 transition-colors"
-      style={{ background: '#1a2235', border: '1px solid #1f2937' }}
+      className="dr-card dr-fade-in px-3 py-2.5 mb-2 relative overflow-hidden"
+      style={{ borderLeft: `3px solid ${accent}` }}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">

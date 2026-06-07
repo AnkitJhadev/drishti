@@ -34,7 +34,7 @@ export default function ApprovalCard({ recommendation }: Props) {
   }
 
   return (
-    <div className="p-3 rounded-lg mb-3" style={{ background: '#1a2235', border: '1px solid #1f2937' }}>
+    <div className="dr-card dr-fade-in p-3 mb-3">
       <RecommendationCard recommendation={recommendation} />
 
       {/* Optional note */}

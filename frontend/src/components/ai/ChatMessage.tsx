@@ -15,7 +15,7 @@ export default function ChatMessage({ message }: Props) {
     : []
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
+    <div className={`dr-fade-in flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
       <div
         className="max-w-[80%] px-3 py-2 rounded-lg text-sm"
         style={{

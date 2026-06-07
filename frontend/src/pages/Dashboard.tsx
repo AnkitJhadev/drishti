@@ -60,8 +60,8 @@ export default function Dashboard() {
       {/* Floating Approvals button */}
       <button
         onClick={() => setApprovalOpen(true)}
-        className="fixed z-[1400] flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-transform hover:scale-105"
-        style={{ bottom: 20, right: 20, background: '#f59e0b', color: '#0a0f1e' }}
+        className="dr-btn-accent fixed z-[1400] flex items-center gap-2 px-4 py-2.5 text-sm"
+        style={{ bottom: 20, right: 20, borderRadius: 999 }}
       >
         <span>⚖ Approvals</span>
         {pendingCount > 0 && (

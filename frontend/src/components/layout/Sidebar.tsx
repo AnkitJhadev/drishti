@@ -45,8 +45,7 @@ export default function Sidebar() {
         {/* Ingest button */}
         <button
           onClick={() => setIngestOpen(true)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded mt-2 text-sm font-semibold transition-transform hover:scale-[1.02]"
-          style={{ background: '#f59e0b', color: '#0a0f1e' }}
+          className="dr-btn-accent w-full flex items-center justify-center gap-2 px-3 py-2 mt-2 text-sm"
         >
           <span>＋</span>
           <span>Ingest Complaints</span>

@@ -28,12 +28,10 @@ export default function AnalyticsPanel() {
   const affectedTowers = towers.filter((t) => t.status !== 'operational').length
 
   return (
-    <div className="h-full flex flex-col rounded" style={{ background: '#111827', border: '1px solid #1f2937' }}>
+    <div className="dr-panel h-full flex flex-col">
       {/* Header */}
       <div className="px-4 py-3 shrink-0" style={{ borderBottom: '1px solid #1f2937' }}>
-        <h2 className="text-sm font-semibold mb-3" style={{ color: '#f9fafb' }}>
-          Live Metrics
-        </h2>
+        <h2 className="dr-title mb-3">Live Metrics</h2>
 
         {/* Summary stats */}
         <div className="flex gap-2 mb-3">

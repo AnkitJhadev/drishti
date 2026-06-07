@@ -15,14 +15,26 @@ export default function TopBar() {
   return (
     <header
       className="flex items-center justify-between px-4 h-14 shrink-0"
-      style={{ background: '#111827', borderBottom: '1px solid #1f2937' }}
+      style={{
+        background: 'linear-gradient(180deg, #141d30, #111827)',
+        borderBottom: '1px solid #1f2937',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+      }}
     >
       {/* Logo */}
       <div className="flex items-center gap-3">
-        <span className="text-lg font-bold tracking-widest" style={{ color: '#f59e0b' }}>
-          ● DRISHTI
+        <span
+          className="text-lg font-bold tracking-widest"
+          style={{
+            background: 'linear-gradient(90deg, #fbbf24, #f59e0b)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          ◈ DRISHTI
         </span>
-        <span className="text-xs" style={{ color: '#6b7280' }}>
+        <span className="text-xs hidden sm:inline" style={{ color: '#6b7280' }}>
           Telecom AI Operations
         </span>
       </div>

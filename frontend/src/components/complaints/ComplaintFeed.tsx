@@ -20,14 +20,16 @@ export default function ComplaintFeed() {
     filter === 'all' ? complaints : complaints.filter((c) => c.severity === filter)
 
   return (
-    <div className="h-full flex flex-col" style={{ background: '#111827', border: '1px solid #1f2937', borderRadius: 8 }}>
+    <div className="dr-panel h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid #1f2937' }}>
+      <div className="dr-panel-header shrink-0">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold" style={{ color: '#f9fafb' }}>
-            Live Complaint Feed
-          </h2>
-          <span className="text-xs px-1.5 rounded" style={{ background: '#1a2235', color: '#9ca3af' }}>
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: '#10b981' }} />
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: '#10b981' }} />
+          </span>
+          <h2 className="dr-title">Live Complaint Feed</h2>
+          <span className="dr-chip" style={{ background: '#1a2235', color: '#9ca3af' }}>
             {filtered.length}
           </span>
         </div>
@@ -51,9 +53,11 @@ export default function ComplaintFeed() {
       {/* List */}
       <div className="flex-1 overflow-y-auto p-3">
         {loading && (
-          <p className="text-xs text-center py-8" style={{ color: '#6b7280' }}>
-            Loading complaints…
-          </p>
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="dr-skeleton" style={{ height: 64 }} />
+            ))}
+          </div>
         )}
         {!loading && filtered.length === 0 && (
           <p className="text-xs text-center py-8" style={{ color: '#6b7280' }}>

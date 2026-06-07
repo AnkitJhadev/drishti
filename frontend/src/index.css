@@ -9,24 +9,139 @@
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   * {
     box-sizing: border-box;
   }
 
+  /* Subtle depth: faint radial glow behind the page */
+  #root {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 70% -10%, rgba(245, 158, 11, 0.05), transparent 60%),
+      radial-gradient(700px 500px at 0% 100%, rgba(59, 130, 246, 0.04), transparent 55%);
+  }
+
+  ::selection {
+    background: rgba(245, 158, 11, 0.3);
+    color: #fff;
+  }
+
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
-
   ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2a3447;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3b475e;
+  }
+}
+
+@layer components {
+  /* Panel — the main surface for dashboard sections */
+  .dr-panel {
     background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.18);
   }
 
-  ::-webkit-scrollbar-thumb {
-    background: #374151;
-    border-radius: 2px;
+  .dr-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #1f2937;
+  }
+
+  .dr-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f9fafb;
+    letter-spacing: 0.01em;
+  }
+
+  /* Card — inner item surface (complaints, recommendations) */
+  .dr-card {
+    background: #1a2235;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dr-card:hover {
+    border-color: #374151;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Glassmorphism — for floating overlays on the map */
+  .dr-glass {
+    background: rgba(17, 24, 39, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Amber pill button */
+  .dr-btn-accent {
+    background: linear-gradient(180deg, #f7b13a, #f59e0b);
+    color: #0a0f1e;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  }
+  .dr-btn-accent:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(245, 158, 11, 0.28);
+  }
+  .dr-btn-accent:active {
+    transform: translateY(0);
+  }
+
+  /* Chip / badge */
+  .dr-chip {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+}
+
+@layer utilities {
+  @keyframes dr-fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  .dr-fade-in {
+    animation: dr-fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes dr-pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+  .dr-pulse-danger {
+    animation: dr-pulse-ring 1.8s infinite;
+  }
+
+  @keyframes dr-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .dr-skeleton {
+    background: linear-gradient(90deg, #161e2e 25%, #1f2a3d 50%, #161e2e 75%);
+    background-size: 800px 100%;
+    animation: dr-shimmer 1.4s infinite linear;
+    border-radius: 6px;
   }
 }
 
@@ -34,4 +149,13 @@
 .leaflet-container {
   background: #0a0f1e !important;
   font-family: 'Inter', system-ui, sans-serif;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #1a2235 !important;
+  color: #f9fafb !important;
+  border: 1px solid #1f2937;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 8px !important;
 }

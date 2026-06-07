@@ -16,6 +16,7 @@ import complaintsRouter from './routes/complaints'
 import towersRouter from './routes/towers'
 import alertsRouter from './routes/alerts'
 import recommendationsRouter from './routes/recommendations'
+import aiRouter from './routes/ai'
 
 const app = express()
 const httpServer = createServer(app)
@@ -35,6 +36,7 @@ app.use('/complaints',      complaintsRouter)
 app.use('/towers',          towersRouter)
 app.use('/alerts',          alertsRouter)
 app.use('/recommendations', recommendationsRouter)
+app.use('/ai',              aiRouter)
 
 // ── Global error handler (must be last) ─────────────────
 app.use(errorHandler)

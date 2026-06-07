@@ -26,7 +26,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const [rows, countRows] = await Promise.all([
-      query(
+      query<{ lat: number; lng: number }>(
         `SELECT id, source, raw_text, location_hint, lat, lng, sender,
                 timestamp, status, issue_type, severity, confidence,
                 cluster_id, tower_id, media_url
@@ -41,8 +41,14 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       ),
     ])
 
+    // Map lat/lng → coordinates tuple to match the frontend type
+    const complaints = rows.map((r) => ({
+      ...r,
+      coordinates: [r.lat ?? 0, r.lng ?? 0],
+    }))
+
     res.json({
-      complaints: rows,
+      complaints,
       pagination: {
         page,
         limit,

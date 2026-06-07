@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import Layout from '../components/layout/Layout'
+import DrishtiMap from '../components/map/DrishtiMap'
 import ComplaintFeed from '../components/complaints/ComplaintFeed'
 import { useComplaints } from '../hooks/useComplaints'
 import { useTowers } from '../hooks/useTowers'
@@ -34,9 +35,9 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="h-full p-3 grid gap-3" style={{ gridTemplateColumns: '1fr 340px', gridTemplateRows: '1fr 1fr' }}>
-        {/* Map — Hour 8 */}
-        <div style={{ gridColumn: '1', gridRow: '1' }}>
-          <Placeholder label="Geospatial Map — coming Hour 8" />
+        {/* Map — Hour 8 ✓ */}
+        <div style={{ gridColumn: '1', gridRow: '1', minHeight: 0 }}>
+          <DrishtiMap />
         </div>
 
         {/* Metrics — Hour 9 */}

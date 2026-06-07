@@ -8,7 +8,7 @@ const router = Router()
 // GET /towers — all towers with status
 router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await query(
+    const rows = await query<{ lat: number; lng: number }>(
       `SELECT id, name, lat, lng, status, coverage_radius_km,
               active_complaints, affected_users, last_checked
        FROM towers
@@ -21,7 +21,9 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
          END,
          active_complaints DESC`
     )
-    res.json({ towers: rows })
+    // Map lat/lng → coordinates tuple to match the frontend Tower type
+    const towers = rows.map((r) => ({ ...r, coordinates: [r.lat, r.lng] }))
+    res.json({ towers })
   } catch (err) {
     logger.error(`GET /towers error: ${String(err)}`)
     res.status(500).json({ error: 'Failed to fetch towers' })

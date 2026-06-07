@@ -1,23 +1,13 @@
 import { useEffect } from 'react'
 import Layout from '../components/layout/Layout'
 import DrishtiMap from '../components/map/DrishtiMap'
+import AnalyticsPanel from '../components/analytics/AnalyticsPanel'
 import ComplaintFeed from '../components/complaints/ComplaintFeed'
 import { useComplaints } from '../hooks/useComplaints'
 import { useTowers } from '../hooks/useTowers'
 import { useAlerts } from '../hooks/useAlerts'
 import { useAuthStore } from '../stores/authStore'
 import { connectSocket } from '../services/socket'
-
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div
-      className="h-full flex items-center justify-center rounded"
-      style={{ background: '#111827', border: '1px dashed #1f2937', color: '#6b7280' }}
-    >
-      <span className="text-xs">{label}</span>
-    </div>
-  )
-}
 
 export default function Dashboard() {
   const token = useAuthStore((s) => s.token)
@@ -40,9 +30,9 @@ export default function Dashboard() {
           <DrishtiMap />
         </div>
 
-        {/* Metrics — Hour 9 */}
-        <div style={{ gridColumn: '2', gridRow: '1 / span 2' }}>
-          <Placeholder label="Live Metrics — coming Hour 9" />
+        {/* Metrics — Hour 9 ✓ */}
+        <div style={{ gridColumn: '2', gridRow: '1 / span 2', minHeight: 0 }}>
+          <AnalyticsPanel />
         </div>
 
         {/* Live complaint feed — Hour 7 ✓ */}

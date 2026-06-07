@@ -32,7 +32,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="p-3 space-y-3">
+      <div className="p-3 space-y-3" style={{ paddingBottom: 88 }}>
         {/* Map — full width, tall, expandable (Hour 8) */}
         <div id="section-towers" style={{ scrollMarginTop: 12 }}>
           <DrishtiMap />

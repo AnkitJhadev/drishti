@@ -30,6 +30,7 @@
     "sharp": "^0.33.4",
     "socket.io": "^4.7.5",
     "tesseract.js": "^5.1.0",
+    "unpdf": "^1.6.2",
     "uuid": "^14.0.0",
     "voyageai": "^0.0.5",
     "winston": "^3.13.0",

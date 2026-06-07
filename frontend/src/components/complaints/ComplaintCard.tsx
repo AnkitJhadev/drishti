@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import type { EnrichedComplaint, Severity } from '../../types/complaint'
 import { useComplaintsStore } from '../../stores/complaintsStore'
+import ComplaintDetailModal from './ComplaintDetailModal'
 import api from '../../services/api'
 
 const SEVERITY_STYLE: Record<Severity, { bg: string; text: string }> = {
@@ -40,8 +41,10 @@ export default function ComplaintCard({ complaint }: Props) {
 
   const resolveInStore = useComplaintsStore((s) => s.resolveComplaint)
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(false)
 
-  async function resolve() {
+  async function resolve(e: MouseEvent) {
+    e.stopPropagation() // don't open the modal
     setBusy(true)
     resolveInStore(complaint.id) // optimistic
     try {
@@ -55,9 +58,11 @@ export default function ComplaintCard({ complaint }: Props) {
 
   return (
     <div
-      className="dr-card dr-fade-in px-3 py-2.5 mb-2 relative overflow-hidden group"
+      onClick={() => setOpen(true)}
+      className="dr-card dr-fade-in px-3 py-2.5 mb-2 relative overflow-hidden group cursor-pointer"
       style={{ borderLeft: `3px solid ${accent}`, opacity: isResolved ? 0.65 : 1 }}
     >
+      {open && <ComplaintDetailModal complaintId={complaint.id} onClose={() => setOpen(false)} />}
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
           <span style={{ color: '#6b7280' }}>{SOURCE_ICON[complaint.source] ?? '•'}</span>

@@ -38,13 +38,20 @@ function clientFor(provider: Provider): { client: OpenAI; model: string } {
   return { client: groqClient, model: GROQ_MODEL }
 }
 
+export interface RunOptions {
+  // Force exactly one call to this tool and return immediately after executing
+  // it — no follow-up completion. Halves token cost for single-shot tasks.
+  forceTool?: string
+}
+
 // One full tool-calling loop against a single OpenAI-compatible provider.
 async function runOnProvider(
   provider: Provider,
   systemPrompt: string,
   userMessage: string,
   tools: Anthropic.Tool[],
-  toolExecutor: ToolExecutor
+  toolExecutor: ToolExecutor,
+  opts: RunOptions = {}
 ): Promise<string> {
   const { client, model } = clientFor(provider)
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -52,19 +59,21 @@ async function runOnProvider(
     { role: 'user', content: userMessage },
   ]
   const oaiTools = toOpenAITools(tools)
+  const toolChoice: OpenAI.Chat.ChatCompletionToolChoiceOption = opts.forceTool
+    ? { type: 'function', function: { name: opts.forceTool } }
+    : 'auto'
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    // Llama sometimes emits a malformed tool call (Groq 400). Retry once —
-    // it usually succeeds on the second try.
+    // Llama sometimes emits a malformed tool call (Groq 400). Retry once.
     let response: OpenAI.Chat.ChatCompletion | undefined
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         response = await client.chat.completions.create({
           model,
-          max_tokens: 2048,
+          max_tokens: opts.forceTool ? 400 : 2048,
           messages,
           tools: oaiTools,
-          tool_choice: 'auto',
+          tool_choice: toolChoice,
           parallel_tool_calls: false,
         })
         break
@@ -96,6 +105,8 @@ async function runOnProvider(
         const result = await toolExecutor(tc.function.name, args)
         messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
       }
+      // Single-shot mode: tool executed, no follow-up call needed.
+      if (opts.forceTool) return ''
       continue
     }
 
@@ -116,7 +127,8 @@ export async function runLLMAgent(
   systemPrompt: string,
   userMessage: string,
   tools: Anthropic.Tool[],
-  toolExecutor: ToolExecutor
+  toolExecutor: ToolExecutor,
+  opts: RunOptions = {}
 ): Promise<string> {
   const chain = routeFor(task).filter(hasKey)
   if (chain.length === 0) {
@@ -126,7 +138,7 @@ export async function runLLMAgent(
 
   for (const provider of chain) {
     try {
-      return await runOnProvider(provider, systemPrompt, userMessage, tools, toolExecutor)
+      return await runOnProvider(provider, systemPrompt, userMessage, tools, toolExecutor, opts)
     } catch (err) {
       lastError = err
       logger.warn(`Provider ${provider} failed for task ${task}: ${String(err)} — trying next`)

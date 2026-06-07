@@ -115,8 +115,10 @@ export async function runIngestionAgent(
 
   const userMessage = `Classify this complaint:\n"${rawText}"`
 
-  // 1. Classify via LLM (single tool call)
-  await runAgent(systemPrompt, userMessage, TOOLS, makeToolExecutor(complaintId), 'classify')
+  // 1. Classify via LLM — forced single tool call (1 API call, ~half tokens)
+  await runAgent(systemPrompt, userMessage, TOOLS, makeToolExecutor(complaintId), 'classify', {
+    forceTool: 'classify_issue',
+  })
 
   // 2. Embed + index in code (no LLM round-trip needed)
   try {

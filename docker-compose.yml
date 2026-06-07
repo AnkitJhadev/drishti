@@ -22,9 +22,23 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   postgres_data:
   qdrant_data:
+  redis_data:
 
-# Note: Redis is Upstash — no local container needed
+# Note: Redis runs locally for dev (Upstash port 6379 is often blocked on
+#       home/office networks). Production uses Upstash via REDIS_URL in .env.
 # Note: Run backend and frontend manually with npm run dev

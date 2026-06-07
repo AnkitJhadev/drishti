@@ -12,14 +12,25 @@ const MAX_ITERATIONS = 12
 // Convert Anthropic-style tool defs → OpenAI function defs (shared by all
 // OpenAI-compatible providers).
 function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[] {
-  return tools.map((t) => ({
-    type: 'function',
-    function: {
-      name: t.name,
-      description: t.description ?? '',
-      parameters: t.input_schema as Record<string, unknown>,
-    },
-  }))
+  return tools.map((t) => {
+    const schema = { ...(t.input_schema as Record<string, unknown>) }
+    const props = (schema.properties ?? {}) as Record<string, unknown>
+    // Llama on Groq rejects function schemas with zero properties — inject a
+    // harmless optional field so no-arg tools still validate.
+    if (Object.keys(props).length === 0) {
+      schema.properties = {
+        _noop: { type: 'string', description: 'unused; leave empty' },
+      }
+    }
+    return {
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description ?? '',
+        parameters: schema,
+      },
+    }
+  })
 }
 
 function clientFor(provider: Provider): { client: OpenAI; model: string } {
@@ -43,13 +54,30 @@ async function runOnProvider(
   const oaiTools = toOpenAITools(tools)
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await client.chat.completions.create({
-      model,
-      max_tokens: 2048,
-      messages,
-      tools: oaiTools,
-      tool_choice: 'auto',
-    })
+    // Llama sometimes emits a malformed tool call (Groq 400). Retry once —
+    // it usually succeeds on the second try.
+    let response: OpenAI.Chat.ChatCompletion | undefined
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await client.chat.completions.create({
+          model,
+          max_tokens: 2048,
+          messages,
+          tools: oaiTools,
+          tool_choice: 'auto',
+          parallel_tool_calls: false,
+        })
+        break
+      } catch (err) {
+        const is400 = (err as { status?: number }).status === 400
+        if (is400 && attempt === 0) {
+          logger.warn(`[${provider}] malformed tool call, retrying once`)
+          continue
+        }
+        throw err
+      }
+    }
+    if (!response) break
 
     const msg = response.choices[0]?.message
     if (!msg) break

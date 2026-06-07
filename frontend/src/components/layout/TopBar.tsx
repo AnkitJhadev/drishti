@@ -1,4 +1,5 @@
 import { useAuthStore } from '../../stores/authStore'
+import { useConnectionStore } from '../../stores/connectionStore'
 import { useOfflineStatus } from '../../hooks/useOfflineStatus'
 import { disconnectSocket } from '../../services/socket'
 
@@ -6,6 +7,12 @@ export default function TopBar() {
   const operator = useAuthStore((s) => s.operator)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const offline = useOfflineStatus()
+  const connected = useConnectionStore((s) => s.connected)
+
+  // LIVE only when the WebSocket is actually streaming
+  const live = connected && !offline
+  const statusColor = live ? '#10b981' : offline ? '#6b7280' : '#f59e0b'
+  const statusLabel = live ? 'LIVE' : offline ? 'OFFLINE' : 'CONNECTING'
 
   function handleLogout() {
     disconnectSocket()
@@ -41,20 +48,19 @@ export default function TopBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-4">
-        {/* Live indicator */}
+        {/* Live indicator — reflects the real WebSocket connection */}
         <div className="flex items-center gap-1.5">
           <span className="relative flex h-2 w-2">
-            <span
-              className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-              style={{ background: offline ? '#6b7280' : '#10b981' }}
-            />
-            <span
-              className="relative inline-flex rounded-full h-2 w-2"
-              style={{ background: offline ? '#6b7280' : '#10b981' }}
-            />
+            {live && (
+              <span
+                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                style={{ background: statusColor }}
+              />
+            )}
+            <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: statusColor }} />
           </span>
-          <span className="text-xs" style={{ color: offline ? '#6b7280' : '#10b981' }}>
-            {offline ? 'OFFLINE' : 'LIVE'}
+          <span className="text-xs" style={{ color: statusColor }}>
+            {statusLabel}
           </span>
         </div>
 

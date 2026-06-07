@@ -3,6 +3,7 @@ import { useComplaintsStore } from '../stores/complaintsStore'
 import { useAlertsStore } from '../stores/alertsStore'
 import { useAIChatStore } from '../stores/aiChatStore'
 import { useTowersStore } from '../stores/towersStore'
+import { useConnectionStore } from '../stores/connectionStore'
 import type { EnrichedComplaint } from '../types/complaint'
 import type { Alert } from '../types/alert'
 import type { AIRecommendation } from '../types/ai'
@@ -17,6 +18,11 @@ export function connectSocket(token: string): void {
     auth: { token },
     transports: ['websocket'],
   })
+
+  // Real connection state for the LIVE indicator
+  socket.on('connect', () => useConnectionStore.getState().setConnected(true))
+  socket.on('disconnect', () => useConnectionStore.getState().setConnected(false))
+  socket.on('connect_error', () => useConnectionStore.getState().setConnected(false))
 
   socket.on('complaint:new', (data: { complaint: EnrichedComplaint }) => {
     useComplaintsStore.getState().addComplaint(data.complaint)
@@ -38,4 +44,5 @@ export function connectSocket(token: string): void {
 export function disconnectSocket(): void {
   socket?.disconnect()
   socket = null
+  useConnectionStore.getState().setConnected(false)
 }

@@ -3,7 +3,7 @@ import ApprovalCard from './ApprovalCard'
 import RecommendationCard from '../ai/RecommendationCard'
 import { useAIChatStore } from '../../stores/aiChatStore'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
-import api from '../../services/api'
+import { sendOrQueue } from '../../services/actionQueue'
 
 interface Props {
   open: boolean
@@ -24,7 +24,7 @@ export default function ApprovalPanel({ open, onClose }: Props) {
   async function resolve(id: string) {
     setBusyId(id)
     try {
-      await api.patch(`/recommendations/${id}/resolve`)
+      await sendOrQueue({ url: `/recommendations/${id}/resolve`, label: 'resolve recommendation' })
       setResolvedIds((prev) => new Set(prev).add(id))
     } catch {
       // keep card

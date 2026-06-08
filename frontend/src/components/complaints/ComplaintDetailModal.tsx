@@ -6,6 +6,7 @@ import {
 import api from '../../services/api'
 import { useComplaintsStore } from '../../stores/complaintsStore'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { sendOrQueue } from '../../services/actionQueue'
 import type { Severity } from '../../types/complaint'
 
 const SEV_ORDER: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -81,7 +82,7 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
     setBusy(true)
     resolveInStore(complaintId)
     try {
-      await api.patch(`/complaints/${complaintId}/resolve`)
+      await sendOrQueue({ url: `/complaints/${complaintId}/resolve`, label: 'resolve complaint' })
       setDetail((d) => (d ? { ...d, status: 'resolved' } : d))
     } catch {
       // reconciled via socket

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import RecommendationCard from '../ai/RecommendationCard'
 import { useAIChatStore } from '../../stores/aiChatStore'
-import api from '../../services/api'
+import { sendOrQueue } from '../../services/actionQueue'
 import type { AIRecommendation } from '../../types/ai'
 
 type Action = 'approve' | 'reject' | 'escalate'
@@ -19,7 +19,12 @@ export default function ApprovalCard({ recommendation }: Props) {
   async function act(action: Action) {
     setBusy(action)
     try {
-      await api.patch(`/recommendations/${recommendation.id}/${action}`, { note: note || undefined })
+      // Sent now, or queued if offline — either way we optimistically update.
+      await sendOrQueue({
+        url: `/recommendations/${recommendation.id}/${action}`,
+        body: { note: note || undefined },
+        label: `${action} recommendation`,
+      })
       const newStatus =
         action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'pending'
       // Escalate keeps it pending but flag handled server-side; approve/reject remove from list
@@ -27,7 +32,7 @@ export default function ApprovalCard({ recommendation }: Props) {
         updateStatus(recommendation.id, newStatus as AIRecommendation['status'], note || undefined)
       }
     } catch {
-      // keep card; could show toast
+      // genuine server rejection — keep card
     } finally {
       setBusy(null)
     }

@@ -1,6 +1,82 @@
 # Drishti — Telecom AI Operations Platform
 > "From complaint to resolution — intelligently."
 
+---
+
+# ⚡ CURRENT IMPLEMENTATION STATE — READ THIS FIRST
+> This section reflects what is **actually built** as of the latest commit. Where it
+> differs from the original plan further down, **this section wins.** The plan below is
+> kept for reference/context only.
+
+## Status: all 12 build hours complete + advanced features. Fully working locally.
+
+### What's built
+- **Auth**: JWT login, seeded admin, persisted to IndexedDB (stays logged in offline)
+- **Ingestion**: PDF (unpdf + pdf-parse fallback), CSV (papaparse), image (tesseract OCR + Gemini vision fallback), email (mailparser); drag-drop IngestionPanel
+- **4 AI agents** via a provider-agnostic runner: Ingestion (classify), Pattern (cluster + correlate + recommend), NL Query (RAG chat), Approval (resolution follow-up)
+- **RAG**: custom pipeline (chunker → embedder → indexer → retriever), Qdrant vectors
+- **Dashboard**: live complaint feed, React-Leaflet map (markers + heatmap, expandable), Recharts analytics (Issues/Severity/Trend/Top-Towers tabs) + KPI strip, NL chat (bottom bar), approvals drawer
+- **Advanced (for Sarvam Chanakya fit)**: D3 ontology graph (sidebar "Network Graph"), tower-failure Simulation UI, Three.js 3D command view, offline-first (IndexedDB), error boundaries, code-splitting/lazy-loading
+- **Real-time**: Socket.io — complaint:new, alert:new, recommendation:ready, tower:status:changed, complaint:resolved
+- **Resolve flows**: click a complaint card → detail modal (charts) → resolve; approvals drawer Pending/In-Progress tabs
+
+### ❗ KEY DIVERGENCES FROM THE ORIGINAL PLAN (important)
+| Original plan | Actual implementation | Why |
+|---|---|---|
+| **Claude API** for agents | **Groq (Llama 3.3 70B) → Gemini → Together** fallback chain | Claude API needs paid credits; these have free tiers. Claude removed from active path. |
+| **Voyage AI** embeddings (512-dim) | **Local `@xenova/transformers` all-MiniLM-L6-v2 (384-dim)** by default | Voyage free tier = 3 req/min; local is free/unlimited/offline. Voyage kept as `EMBED_PROVIDER=voyage` option. |
+| **Upstash Redis** (even local) | **Local Redis via Docker** | Upstash port 6379 blocked on many networks. Upstash kept for prod. |
+| JWT **in memory only** | **Persisted to IndexedDB** | Required for offline-first / field use (role priority). Documented trade-off. |
+| `POINT` columns | **separate `lat`/`lng` FLOAT columns** | Easier to serialize; routes map to `coordinates: [lat,lng]`. |
+| Single Claude `agentRunner` | **`src/llm/` router** (`groq.ts`, `gemini.ts`, `together.ts`, `router.ts`, `index.ts`); `agentRunner.ts` delegates to it | Provider abstraction + fallback. |
+
+### LLM architecture (`backend/src/llm/`)
+- `runLLMAgent(task, system, user, tools, executor, opts)` — tries providers in `router.ts`'s chain, skips providers without keys, retries Groq 400s once, supports `forceTool` (single-call, ~half tokens — used by classify).
+- Tool defs are Anthropic-shaped; converted to OpenAI (Groq/Together) or Gemini function-calling formats internally.
+- Agents tag their task: `classify` / `pattern` / `nl_query` / `approval`.
+
+### How to run locally
+```bash
+# 1. Infra (Postgres + Qdrant + Redis)
+docker compose up -d
+
+# 2. Backend  (terminal 1)   — loads root ../.env via src/env.ts
+cd backend && npm install && npm run dev      # http://localhost:4000
+
+# 3. Frontend (terminal 2)
+cd frontend && npm install && npm run dev      # http://localhost:3000
+```
+**Demo login:** `admin@drishti.com` / `drishti@123` (pre-filled on the login page)
+
+### Env vars (root `.env`, loaded by `backend/src/env.ts`; NEVER commit `.env`)
+```
+DATABASE_URL=postgresql://drishti_user:drishti_pass@localhost:5432/drishti
+REDIS_URL=redis://localhost:6379            # local dev; Upstash rediss:// for prod
+QDRANT_URL=http://localhost:6333
+EMBED_PROVIDER=local                          # local | voyage
+EMBED_DIM=384                                 # 384 local, 512 voyage
+GROQ_API_KEY=...                              # required — console.groq.com (free)
+GEMINI_API_KEY=...                            # optional fallback — must be an AIza... key
+JWT_SECRET=...
+```
+
+### Known constraints
+- **Groq free tier**: ~100K tokens/day + ~30 req/min. Bulk ingest is throttled (worker concurrency 1, limiter 4/min, retries). Add Gemini key as fallback or wait for daily reset.
+- **Embeddings are local** — first run downloads ~30MB model (cached after). Non-fatal if it fails (complaint still classified, just not RAG-searchable).
+- Approval/resolve are **deterministic** (DB), not LLM-gated — they work without any AI provider.
+
+### Verify before committing
+```bash
+cd backend && npx tsc --noEmit          # backend types
+cd frontend && npx tsc --noEmit && npm run build   # frontend types + bundle
+```
+Commit style: end messages with no AI/Claude co-author line (user preference — human-style commits).
+
+### Frontend file map (additions beyond the plan)
+- `src/llm/` is backend; frontend extras: `components/ontology/` (D3), `components/simulation/` (what-if), `components/three/` (R3F 3D), `components/ErrorBoundary.tsx`, `services/idbStorage.ts`, `stores/connectionStore.ts`
+
+---
+
 ## What is Drishti?
 A full-stack AI platform where telecom operators ingest customer complaints from multiple channels
 (email, PDF, image, SMS, CSV), AI agents automatically detect patterns, correlate affected towers,

@@ -1,5 +1,7 @@
 # Drishti — Telecom AI Operations Platform
 
+[![CI](https://github.com/AnkitJhadev/drishti/actions/workflows/ci.yml/badge.svg)](https://github.com/AnkitJhadev/drishti/actions/workflows/ci.yml)
+
 > _"From complaint to resolution — intelligently."_
 
 Drishti is a full-stack AI platform for telecom operators. Customer complaints arrive

@@ -1,5 +1,7 @@
 import { useState, useRef, type DragEvent, type ChangeEvent } from 'react'
 import api from '../../services/api'
+import { useComplaintsStore } from '../../stores/complaintsStore'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   open: boolean
@@ -27,6 +29,23 @@ export default function IngestionPanel({ open, onClose }: Props) {
   const [error, setError] = useState('')
   const [rejected, setRejected] = useState<Rejection[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Live classification progress: the ingestion agent re-emits each complaint
+  // once it's classified (status leaves 'pending'), so we count how many of the
+  // just-uploaded ids have been processed by the agents.
+  const complaints = useComplaintsStore((s) => s.complaints)
+  const ingestedIds = result?.ids ?? []
+  const total = ingestedIds.length
+  const processed =
+    total === 0
+      ? 0
+      : (() => {
+          const ids = new Set(ingestedIds)
+          return complaints.filter((c) => ids.has(c.id) && c.status !== 'pending').length
+        })()
+  const done = total > 0 && processed >= total
+
+  useEscapeKey(open, onClose)
 
   if (!open) return null
 
@@ -77,14 +96,25 @@ export default function IngestionPanel({ open, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[1700] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div className="w-full max-w-lg rounded-lg" style={{ background: '#111827', border: '1px solid #1f2937' }}>
+    <div
+      className="fixed inset-0 z-[1700] flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-lg"
+        style={{ background: '#111827', border: '1px solid #1f2937' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Ingest complaints"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #1f2937' }}>
           <h2 className="text-sm font-semibold" style={{ color: '#f9fafb' }}>
             Ingest Complaints
           </h2>
-          <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
 
         <div className="p-4">
@@ -129,10 +159,35 @@ export default function IngestionPanel({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* Result / error */}
-          {result && (
+          {/* Result + live agent processing progress */}
+          {result && total === 0 && (
             <div className="mt-3 px-3 py-2 rounded text-xs" style={{ background: '#064e3b', color: '#6ee7b7' }}>
-              ✓ {result.message} — agents are now processing them live.
+              ℹ {result.message}
+            </div>
+          )}
+          {result && total > 0 && (
+            <div
+              className="mt-3 px-3 py-2 rounded text-xs"
+              style={
+                done
+                  ? { background: '#064e3b', color: '#6ee7b7' }
+                  : { background: '#0c2a4a', color: '#93c5fd' }
+              }
+            >
+              {done ? (
+                <span>✓ All {total} complaint{total > 1 ? 's' : ''} ingested and classified by the agents.</span>
+              ) : (
+                <span>
+                  <span className="dr-spinner" /> {total} ingested — agents classifying… {processed}/{total} done
+                </span>
+              )}
+              {/* progress bar */}
+              <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: '#1f2937' }}>
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${Math.round((processed / total) * 100)}%`, background: done ? '#10b981' : '#3b82f6' }}
+                />
+              </div>
             </div>
           )}
           {error && (

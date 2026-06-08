@@ -19,7 +19,15 @@ export const useComplaintsStore = create<ComplaintsState>()(
       loading: false,
       setComplaints: (complaints) => set({ complaints }),
       addComplaint: (complaint) =>
-        set((s) => ({ complaints: [complaint, ...s.complaints] })),
+        set((s) => {
+          // Upsert by id: the ingestion agent re-emits each complaint after
+          // classification, so update in place rather than duplicating.
+          const idx = s.complaints.findIndex((c) => c.id === complaint.id)
+          if (idx === -1) return { complaints: [complaint, ...s.complaints] }
+          const next = s.complaints.slice()
+          next[idx] = { ...next[idx], ...complaint }
+          return { complaints: next }
+        }),
       resolveComplaint: (id) =>
         set((s) => ({
           complaints: s.complaints.map((c) => (c.id === id ? { ...c, status: 'resolved' } : c)),

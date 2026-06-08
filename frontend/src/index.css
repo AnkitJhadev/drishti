@@ -143,6 +143,20 @@
     animation: dr-shimmer 1.4s infinite linear;
     border-radius: 6px;
   }
+
+  @keyframes dr-spin {
+    to { transform: rotate(360deg); }
+  }
+  .dr-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    vertical-align: -1px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: dr-spin 0.7s linear infinite;
+  }
 }
 
 /* Leaflet overrides */

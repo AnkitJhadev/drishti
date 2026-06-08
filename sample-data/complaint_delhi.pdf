@@ -1,0 +1,60 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1010 >>
+stream
+BT /F1 11 Tf 50 760 Td 15 TL
+(TELECOM CUSTOMER COMPLAINT - FORMAL REPORT) Tj T*
+() Tj T*
+(Date: 08 June 2026) Tj T*
+(Customer: Amit Sharma   Mobile: 98110-33077) Tj T*
+(Service Area: Delhi North) Tj T*
+() Tj T*
+(Subject: Frequent call drops affecting business calls) Tj T*
+() Tj T*
+(To the Network Operations Team,) Tj T*
+() Tj T*
+(I am writing to report repeated call drops across the Delhi North) Tj T*
+(sector for the last two days. Calls disconnect every couple of) Tj T*
+(minutes and the voice quality is poor with echo before the drop.) Tj T*
+() Tj T*
+(This is affecting my work calls badly, and colleagues in the same) Tj T*
+(area report identical problems. The issue appears tied to the) Tj T*
+(local tower handling the Delhi North sector.) Tj T*
+() Tj T*
+(Please look into the Delhi North tower and resolve the call drop) Tj T*
+(issue at the earliest.) Tj T*
+() Tj T*
+(Issue type: call drop) Tj T*
+(Severity: medium) Tj T*
+(Location: Delhi North) Tj T*
+() Tj T*
+(Regards,) Tj T*
+(Amit Sharma) Tj T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1373
+%%EOF

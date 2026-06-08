@@ -1,0 +1,62 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1168 >>
+stream
+BT /F1 11 Tf 50 760 Td 15 TL
+(TELECOM CUSTOMER COMPLAINT - FORMAL REPORT) Tj T*
+() Tj T*
+(Date: 08 June 2026) Tj T*
+(Customer: Priya Nair   Mobile: 98450-22099) Tj T*
+(Service Area: Whitefield, Bengaluru) Tj T*
+() Tj T*
+(Subject: Persistently slow internet for several days) Tj T*
+() Tj T*
+(To the Network Operations Team,) Tj T*
+() Tj T*
+(I am writing to report severely degraded mobile data speeds in) Tj T*
+(the Whitefield area of Bengaluru over the past three days. Web) Tj T*
+(pages take very long to load and video calls freeze constantly,) Tj T*
+(making it impossible to work from home reliably.) Tj T*
+() Tj T*
+(Many residents near the Whitefield tech park report the same) Tj T*
+(slow speeds, especially during peak evening hours. The signal) Tj T*
+(shows full bars but throughput is extremely poor, which points) Tj T*
+(to congestion or a degraded tower in the area.) Tj T*
+() Tj T*
+(Please investigate the Whitefield tower capacity and restore) Tj T*
+(normal data performance as soon as possible.) Tj T*
+() Tj T*
+(Issue type: slow internet) Tj T*
+(Severity: high) Tj T*
+(Location: Whitefield, Bengaluru) Tj T*
+() Tj T*
+(Regards,) Tj T*
+(Priya Nair) Tj T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1531
+%%EOF

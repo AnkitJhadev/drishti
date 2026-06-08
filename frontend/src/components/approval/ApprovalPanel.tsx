@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ApprovalCard from './ApprovalCard'
 import RecommendationCard from '../ai/RecommendationCard'
 import { useAIChatStore } from '../../stores/aiChatStore'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import api from '../../services/api'
 
 interface Props {
@@ -34,14 +35,20 @@ export default function ApprovalPanel({ open, onClose }: Props) {
 
   const list = tab === 'pending' ? pending : inProgress
 
+  useEscapeKey(open, onClose)
+
   return (
     <>
       {open && <div className="fixed inset-0 z-[1500]" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose} />}
 
       <aside
         className="fixed top-0 right-0 h-full z-[1600] flex flex-col transition-transform duration-300"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Approvals"
+        aria-hidden={!open}
         style={{
-          width: 380,
+          width: 'min(380px, 100vw)',
           background: '#111827',
           borderLeft: '1px solid #1f2937',
           transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -50,7 +57,7 @@ export default function ApprovalPanel({ open, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: '1px solid #1f2937' }}>
           <h2 className="dr-title">Approvals</h2>
-          <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
 
         {/* Tabs */}

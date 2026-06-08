@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import api from '../../services/api'
 import { useComplaintsStore } from '../../stores/complaintsStore'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import type { Severity } from '../../types/complaint'
 
 const SEV_ORDER: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -64,6 +65,8 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
   const resolveInStore = useComplaintsStore((s) => s.resolveComplaint)
   const allComplaints = useComplaintsStore((s) => s.complaints)
 
+  useEscapeKey(true, onClose)
+
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -110,11 +113,11 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
       style={{ background: 'rgba(0,0,0,0.6)' }}
       onClick={(e) => { e.stopPropagation(); onClose() }}
     >
-      <div className="dr-panel w-full max-w-lg dr-fade-in" onClick={(e) => e.stopPropagation()}>
+      <div className="dr-panel w-full max-w-lg dr-fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Complaint detail">
         {/* Header */}
         <div className="dr-panel-header">
           <h2 className="dr-title">Complaint Detail</h2>
-          <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
 
         {loading || !detail ? (

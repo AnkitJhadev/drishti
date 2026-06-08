@@ -3,7 +3,11 @@ import { useConnectionStore } from '../../stores/connectionStore'
 import { useOfflineStatus } from '../../hooks/useOfflineStatus'
 import { disconnectSocket } from '../../services/socket'
 
-export default function TopBar() {
+interface Props {
+  onMenuClick?: () => void
+}
+
+export default function TopBar({ onMenuClick }: Props) {
   const operator = useAuthStore((s) => s.operator)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const offline = useOfflineStatus()
@@ -30,6 +34,14 @@ export default function TopBar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          aria-label="Open navigation menu"
+          className="md:hidden text-lg leading-none"
+          style={{ color: '#9ca3af' }}
+        >
+          ☰
+        </button>
         <span
           className="text-lg font-bold tracking-widest"
           style={{

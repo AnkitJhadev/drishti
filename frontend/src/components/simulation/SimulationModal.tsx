@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useTowersStore } from '../../stores/towersStore'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { simulateFailure } from './simulate'
 
 interface Props {
@@ -15,17 +16,18 @@ export default function SimulationModal({ open, onClose }: Props) {
   const selected = towers.find((t) => t.id === towerId) ?? towers[0]
   const result = useMemo(() => (selected ? simulateFailure(selected, towers) : null), [selected, towers])
 
+  useEscapeKey(open, onClose)
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-[1700] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-      <div className="dr-panel w-full max-w-2xl dr-fade-in" onClick={(e) => e.stopPropagation()}>
+      <div className="dr-panel w-full max-w-2xl dr-fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Failure simulation">
         <div className="dr-panel-header">
           <div className="flex items-center gap-2">
             <span style={{ color: '#3b82f6' }}>⚡</span>
             <h2 className="dr-title">Failure Simulation — what-if impact</h2>
           </div>
-          <button onClick={onClose} className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-sm" style={{ color: '#9ca3af' }}>✕</button>
         </div>
 
         <div className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">

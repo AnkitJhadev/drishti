@@ -1,10 +1,21 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useAlertsStore } from '../../stores/alertsStore'
 import IngestionPanel from '../complaints/IngestionPanel'
-import OntologyModal from '../ontology/OntologyModal'
-import SimulationModal from '../simulation/SimulationModal'
-import ThreeDModal from '../three/ThreeDModal'
 import type { AlertSeverity } from '../../types/alert'
+
+// Heavy / rarely-opened views — split out of the initial bundle and only
+// fetched the first time the operator opens them.
+const OntologyModal = lazy(() => import('../ontology/OntologyModal'))
+const SimulationModal = lazy(() => import('../simulation/SimulationModal'))
+const ThreeDModal = lazy(() => import('../three/ThreeDModal'))
+
+function ModalLoader() {
+  return (
+    <div className="fixed inset-0 z-[1700] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <span className="dr-spinner" style={{ color: '#f59e0b', width: 20, height: 20 }} />
+    </div>
+  )
+}
 
 const SEVERITY_COLOR: Record<AlertSeverity, string> = {
   info: '#3b82f6',
@@ -19,7 +30,12 @@ const NAV_ITEMS: Array<{ icon: string; label: string; target: string | null }> =
   { icon: '◔', label: 'Analytics', target: 'section-analytics' },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}
+
+export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const alerts = useAlertsStore((s) => s.alerts)
   const unread = alerts.filter((a) => !a.read).length
   const [ingestOpen, setIngestOpen] = useState(false)
@@ -35,11 +51,23 @@ export default function Sidebar() {
     } else {
       document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
     }
+    onMobileClose?.() // close the drawer after navigating on mobile
   }
 
   return (
+    <>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-[1640]"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={onMobileClose}
+        />
+      )}
     <aside
-      className="w-56 shrink-0 flex flex-col"
+      className={`w-56 shrink-0 flex flex-col max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-[1650] max-md:transition-transform max-md:duration-300 ${
+        mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'
+      }`}
       style={{ background: '#111827', borderRight: '1px solid #1f2937' }}
     >
       {/* Nav */}
@@ -102,9 +130,12 @@ export default function Sidebar() {
       </nav>
 
       <IngestionPanel open={ingestOpen} onClose={() => setIngestOpen(false)} />
-      <OntologyModal open={ontologyOpen} onClose={() => setOntologyOpen(false)} />
-      <SimulationModal open={simOpen} onClose={() => setSimOpen(false)} />
-      <ThreeDModal open={threeDOpen} onClose={() => setThreeDOpen(false)} />
+      {/* Mount lazily only once opened so their chunks aren't fetched on load */}
+      <Suspense fallback={<ModalLoader />}>
+        {ontologyOpen && <OntologyModal open onClose={() => setOntologyOpen(false)} />}
+        {simOpen && <SimulationModal open onClose={() => setSimOpen(false)} />}
+        {threeDOpen && <ThreeDModal open onClose={() => setThreeDOpen(false)} />}
+      </Suspense>
 
       {/* Alerts feed */}
       <div className="flex-1 overflow-hidden flex flex-col" style={{ borderTop: '1px solid #1f2937' }}>
@@ -148,5 +179,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   )
 }

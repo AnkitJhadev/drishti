@@ -1,10 +1,8 @@
 import { Router, type Request, type Response } from 'express'
 import multer from 'multer'
 import { requireAuth } from '../middleware/auth'
-import { parsePdf } from '../parsers/pdfParser'
-import { parseCsv } from '../parsers/csvParser'
-import { parseImage } from '../parsers/imageParser'
-import { parseEmail } from '../parsers/emailParser'
+import { parseStructuredPdf, PdfFormatError } from '../parsers/pdfParser'
+import { parseCsv, CsvFormatError } from '../parsers/csvParser'
 import { geocodeLocation } from '../utils/geocoder'
 import { query } from '../db/postgres'
 import { addIngestJob } from '../queue/jobs/ingestJob'
@@ -14,60 +12,62 @@ import type { ComplaintSource } from '../types/complaint'
 
 const router = Router()
 
-// ── Multer: store files in memory (max 20MB per file, max 10 files) ───────
+// ── Accepted input: structured CSV and PDF complaint reports only ─────────
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['application/pdf', 'text/csv', 'image/jpeg', 'image/png', 'image/webp', 'message/rfc822']
-    // also allow by extension for CSV (browsers send text/plain for .csv)
-    const isAllowed = allowed.includes(file.mimetype) || file.originalname.endsWith('.csv') || file.originalname.endsWith('.eml')
-    cb(null, isAllowed)
+    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')
+    // Browsers often send text/plain for .csv, so also match by extension.
+    const isCsv =
+      file.mimetype === 'text/csv' ||
+      file.mimetype === 'application/vnd.ms-excel' ||
+      file.originalname.toLowerCase().endsWith('.csv')
+    cb(null, isPdf || isCsv)
   },
 })
 
-// ── Detect source type from mimetype / filename ───────────────────────────
-function detectSource(mimetype: string, originalname: string): ComplaintSource {
-  if (mimetype === 'application/pdf') return 'pdf'
-  if (mimetype.startsWith('image/')) return 'image'
-  if (mimetype === 'message/rfc822' || originalname.endsWith('.eml')) return 'email'
-  if (mimetype === 'text/csv' || originalname.endsWith('.csv')) return 'csv'
+interface ExtractedRecord {
+  text: string
+  sender?: string
+  locationHint?: string
+  timestamp?: string
+}
+
+interface Rejection {
+  file: string
+  reason: string
+}
+
+function detectSource(mimetype: string, originalname: string): 'pdf' | 'csv' {
+  if (mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf')) return 'pdf'
   return 'csv'
 }
 
-// ── Extract text from a file based on its source type ────────────────────
-async function extractText(
-  buffer: Buffer,
-  source: ComplaintSource,
-  mimetype: string
-): Promise<{ text: string; sender?: string; locationHint?: string; timestamp?: string }[]> {
+// ── Parse + validate one file into insertable records + rejection reasons ──
+async function extractRecords(
+  file: Express.Multer.File,
+  source: 'pdf' | 'csv'
+): Promise<{ records: ExtractedRecord[]; rejections: Rejection[] }> {
+  const rejections: Rejection[] = []
 
   if (source === 'pdf') {
-    const { text } = await parsePdf(buffer)
-    return [{ text }]
+    const { text, locationHint, sender } = await parseStructuredPdf(file.buffer)
+    return { records: [{ text, locationHint, sender }], rejections }
   }
 
-  if (source === 'image') {
-    const { text } = await parseImage(buffer, mimetype)
-    return [{ text }]
+  // CSV
+  const { rows, rejected } = parseCsv(file.buffer)
+  for (const r of rejected) {
+    rejections.push({ file: file.originalname, reason: `row ${r.row}: ${r.reason}` })
   }
-
-  if (source === 'email') {
-    const { text, from, date } = await parseEmail(buffer)
-    return [{ text, sender: from, timestamp: date }]
-  }
-
-  if (source === 'csv') {
-    const rows = parseCsv(buffer)
-    return rows.map((r) => ({
-      text: r.text,
-      sender: r.sender,
-      locationHint: r.location,
-      timestamp: r.timestamp,
-    }))
-  }
-
-  return []
+  const records = rows.map((r) => ({
+    text: r.text,
+    sender: r.sender,
+    locationHint: r.location,
+    timestamp: r.timestamp,
+  }))
+  return { records, rejections }
 }
 
 // ── POST /ingest ──────────────────────────────────────────────────────────
@@ -76,29 +76,40 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
     const files = req.files as Express.Multer.File[] | undefined
 
     if (!files || files.length === 0) {
-      res.status(400).json({ error: 'No files uploaded' })
+      res.status(400).json({ error: 'No valid files uploaded. Only structured .csv and .pdf complaint reports are accepted.' })
       return
     }
 
     const inserted: string[] = []
+    const rejections: Rejection[] = []
 
     for (const file of files) {
       const source = detectSource(file.mimetype, file.originalname)
 
-      let records: { text: string; sender?: string; locationHint?: string; timestamp?: string }[]
-
+      let records: ExtractedRecord[]
       try {
-        records = await extractText(file.buffer, source, file.mimetype)
+        const result = await extractRecords(file, source)
+        records = result.records
+        rejections.push(...result.rejections)
       } catch (parseErr) {
-        logger.warn(`Skipping ${file.originalname}: ${String(parseErr)}`)
+        // Format errors are expected (bad structure) — report them clearly.
+        const reason =
+          parseErr instanceof CsvFormatError || parseErr instanceof PdfFormatError
+            ? parseErr.message
+            : `could not parse file (${String(parseErr)})`
+        logger.warn(`Rejected ${file.originalname}: ${reason}`)
+        rejections.push({ file: file.originalname, reason })
         continue
       }
 
       for (const record of records) {
-        if (!record.text || record.text.length < 5) continue
+        if (!record.text || record.text.length < 5) {
+          rejections.push({ file: file.originalname, reason: 'complaint text too short' })
+          continue
+        }
 
-        // Try to geocode the location hint
         const coords = geocodeLocation(record.locationHint ?? record.text)
+        const sourceCol: ComplaintSource = source
 
         const rows = await query<{ id: string }>(
           `INSERT INTO complaints
@@ -106,7 +117,7 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
            RETURNING id`,
           [
-            source,
+            sourceCol,
             record.text,
             record.locationHint ?? null,
             coords?.[0] ?? null,
@@ -119,14 +130,12 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
         const id = rows[0]?.id
         if (id) {
           inserted.push(id)
-          // Dispatch to BullMQ — agent will classify + embed async
-          await addIngestJob({ complaintId: id, rawText: record.text, source })
+          await addIngestJob({ complaintId: id, rawText: record.text, source: sourceCol })
           logger.info(`Complaint ingested + job queued — id: ${id}, source: ${source}`)
 
-          // Emit live to the dashboard feed immediately (pre-classification)
           emitComplaintNew({
             id,
-            source,
+            source: sourceCol,
             raw_text: record.text,
             location_hint: record.locationHint ?? '',
             timestamp: record.timestamp ?? new Date().toISOString(),
@@ -141,9 +150,13 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
       }
     }
 
-    res.status(201).json({
-      message: `${inserted.length} complaint(s) ingested`,
+    const parts = [`${inserted.length} complaint(s) ingested`]
+    if (rejections.length > 0) parts.push(`${rejections.length} rejected`)
+
+    res.status(inserted.length > 0 ? 201 : 400).json({
+      message: parts.join(', '),
       ids: inserted,
+      rejected: rejections,
     })
   } catch (err) {
     logger.error(`Ingest error: ${String(err)}`)

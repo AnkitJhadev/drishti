@@ -6,12 +6,18 @@ interface Props {
   onClose: () => void
 }
 
+interface Rejection {
+  file: string
+  reason: string
+}
+
 interface Result {
   message: string
   ids: string[]
+  rejected?: Rejection[]
 }
 
-const ACCEPTED = '.pdf,.csv,.eml,image/png,image/jpeg,image/webp'
+const ACCEPTED = '.pdf,.csv'
 
 export default function IngestionPanel({ open, onClose }: Props) {
   const [files, setFiles] = useState<File[]>([])
@@ -19,15 +25,21 @@ export default function IngestionPanel({ open, onClose }: Props) {
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState('')
+  const [rejected, setRejected] = useState<Rejection[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
   if (!open) return null
 
   function addFiles(list: FileList | null) {
     if (!list) return
-    setFiles((prev) => [...prev, ...Array.from(list)])
+    // Client-side guard: only .csv / .pdf
+    const all = Array.from(list)
+    const ok = all.filter((f) => /\.(csv|pdf)$/i.test(f.name))
+    const bad = all.filter((f) => !/\.(csv|pdf)$/i.test(f.name))
+    setFiles((prev) => [...prev, ...ok])
     setResult(null)
-    setError('')
+    setError(bad.length ? `Only .csv and .pdf files are accepted — ignored: ${bad.map((f) => f.name).join(', ')}` : '')
+    setRejected([])
   }
 
   function handleDrop(e: DragEvent) {
@@ -44,6 +56,7 @@ export default function IngestionPanel({ open, onClose }: Props) {
     if (files.length === 0) return
     setUploading(true)
     setError('')
+    setRejected([])
     try {
       const form = new FormData()
       files.forEach((f) => form.append('files', f))
@@ -51,12 +64,13 @@ export default function IngestionPanel({ open, onClose }: Props) {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       setResult(data)
+      setRejected(data.rejected ?? [])
       setFiles([])
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Upload failed'
-      setError(msg)
+      const resp = (err as { response?: { data?: { error?: string; message?: string; rejected?: Rejection[] } } })?.response?.data
+      // A 400 with rejections (nothing valid ingested) — show why.
+      setError(resp?.error ?? resp?.message ?? 'Upload failed')
+      setRejected(resp?.rejected ?? [])
     } finally {
       setUploading(false)
     }
@@ -91,7 +105,7 @@ export default function IngestionPanel({ open, onClose }: Props) {
               Drag & drop files here, or click to browse
             </p>
             <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
-              PDF · CSV · Email (.eml) · Images (PNG/JPG)
+              Structured <strong style={{ color: '#9ca3af' }}>.csv</strong> or <strong style={{ color: '#9ca3af' }}>.pdf</strong> complaint reports only
             </p>
             <input
               ref={inputRef}
@@ -126,6 +140,27 @@ export default function IngestionPanel({ open, onClose }: Props) {
               ⚠ {error}
             </div>
           )}
+
+          {/* Rejected rows / files with reasons */}
+          {rejected.length > 0 && (
+            <div className="mt-3 px-3 py-2 rounded text-xs space-y-1 max-h-32 overflow-y-auto" style={{ background: '#451a03', color: '#fdba74' }}>
+              <div className="font-semibold">{rejected.length} entr{rejected.length === 1 ? 'y' : 'ies'} rejected:</div>
+              {rejected.map((r, i) => (
+                <div key={i} className="truncate">• <span style={{ color: '#fcd34d' }}>{r.file}</span> — {r.reason}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Required format hint */}
+          <div className="mt-3 px-3 py-2 rounded text-xs" style={{ background: '#0a0f1e', color: '#6b7280', border: '1px solid #1f2937' }}>
+            <div className="font-semibold" style={{ color: '#9ca3af' }}>Required format</div>
+            <div className="mt-1">
+              <strong>CSV</strong> header: <code style={{ color: '#fcd34d' }}>complaint,location,phone</code> — <em>location</em> must be a known city/area.
+            </div>
+            <div className="mt-0.5">
+              <strong>PDF</strong>: complaint report with a <code style={{ color: '#fcd34d' }}>Location:</code> field.
+            </div>
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2 mt-4">

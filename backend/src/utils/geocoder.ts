@@ -77,3 +77,15 @@ export function geocodeLocation(locationHint: string): [number, number] | null {
 
   return null
 }
+
+// Human-readable list of accepted location keywords (for validation messages
+// and the ingestion UI). These map 1:1 to the seeded tower cities/areas.
+export const KNOWN_LOCATIONS: string[] = Object.keys(CITY_MAP)
+
+// True if a location hint resolves to a known city/area. Used to reject
+// complaints that can't be placed on the map / correlated to a tower.
+export function isGeocodable(locationHint: string | undefined | null): boolean {
+  if (!locationHint) return false
+  const lower = locationHint.toLowerCase()
+  return KNOWN_LOCATIONS.some((key) => lower.includes(key))
+}

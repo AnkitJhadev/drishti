@@ -61,5 +61,8 @@ export const emitAlertNew = (alert: Alert): void =>
 export const emitTowerStatusChanged = (tower_id: string, status: TowerStatus): void =>
   emit('tower:status:changed', { tower_id, status })
 
+export const emitTowerAdded = (tower: unknown): void =>
+  emit('tower:added', { tower })
+
 export const emitComplaintResolved = (id: string): void =>
   emit('complaint:resolved', { id })

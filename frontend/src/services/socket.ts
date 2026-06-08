@@ -7,7 +7,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import type { EnrichedComplaint } from '../types/complaint'
 import type { Alert } from '../types/alert'
 import type { AIRecommendation } from '../types/ai'
-import type { TowerStatus } from '../types/tower'
+import type { Tower, TowerStatus } from '../types/tower'
 
 let socket: Socket | null = null
 
@@ -38,6 +38,10 @@ export function connectSocket(token: string): void {
 
   socket.on('tower:status:changed', (data: { tower_id: string; status: TowerStatus }) => {
     useTowersStore.getState().updateTowerStatus(data.tower_id, data.status)
+  })
+
+  socket.on('tower:added', (data: { tower: Tower }) => {
+    useTowersStore.getState().addTower(data.tower)
   })
 
   socket.on('complaint:resolved', (data: { id: string }) => {

@@ -1,9 +1,77 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { query } from '../db/postgres'
+import { emitTowerAdded } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
+
+// Generate the next sequential tower id: T-101, T-102, …
+async function nextTowerId(): Promise<string> {
+  const rows = await query<{ id: string }>(`SELECT id FROM towers WHERE id ~ '^T-[0-9]+$'`)
+  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.id.slice(2), 10) || 0), 100)
+  return `T-${max + 1}`
+}
+
+// POST /towers — manually add a new tower (e.g. company opens a new site)
+router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, lat, lng, coverage_radius_km } = req.body as {
+      name?: string
+      lat?: number
+      lng?: number
+      coverage_radius_km?: number
+    }
+
+    // ── Validate ──────────────────────────────────────────────────────────
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'Tower name is required' })
+      return
+    }
+    if (typeof lat !== 'number' || lat < -90 || lat > 90) {
+      res.status(400).json({ error: 'Valid latitude (-90 to 90) is required' })
+      return
+    }
+    if (typeof lng !== 'number' || lng < -180 || lng > 180) {
+      res.status(400).json({ error: 'Valid longitude (-180 to 180) is required' })
+      return
+    }
+    const radius =
+      typeof coverage_radius_km === 'number' && coverage_radius_km > 0
+        ? Math.min(coverage_radius_km, 50)
+        : 2.0
+
+    const id = await nextTowerId()
+
+    const rows = await query<{
+      id: string
+      name: string
+      lat: number
+      lng: number
+      status: string
+      coverage_radius_km: number
+      active_complaints: number
+      affected_users: number
+      last_checked: string
+    }>(
+      `INSERT INTO towers
+         (id, name, lat, lng, status, coverage_radius_km, active_complaints, affected_users)
+       VALUES ($1, $2, $3, $4, 'operational', $5, 0, 0)
+       RETURNING id, name, lat, lng, status, coverage_radius_km,
+                 active_complaints, affected_users, last_checked`,
+      [id, name.trim(), lat, lng, radius]
+    )
+
+    const tower = { ...rows[0], coordinates: [rows[0].lat, rows[0].lng] as [number, number] }
+    emitTowerAdded(tower)
+    logger.info(`Tower added: ${id} "${name}" @ ${lat},${lng}`)
+
+    res.status(201).json({ tower })
+  } catch (err) {
+    logger.error(`POST /towers error: ${String(err)}`)
+    res.status(500).json({ error: 'Failed to add tower' })
+  }
+})
 
 // GET /towers — all towers with status
 router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {

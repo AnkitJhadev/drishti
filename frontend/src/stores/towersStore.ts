@@ -7,6 +7,7 @@ interface TowersState {
   towers: Tower[]
   loading: boolean
   setTowers: (towers: Tower[]) => void
+  addTower: (tower: Tower) => void
   updateTowerStatus: (tower_id: string, status: TowerStatus) => void
   setLoading: (loading: boolean) => void
 }
@@ -17,6 +18,12 @@ export const useTowersStore = create<TowersState>()(
       towers: [],
       loading: false,
       setTowers: (towers) => set({ towers }),
+      addTower: (tower) =>
+        set((s) =>
+          s.towers.some((t) => t.id === tower.id)
+            ? { towers: s.towers.map((t) => (t.id === tower.id ? tower : t)) }
+            : { towers: [tower, ...s.towers] }
+        ),
       updateTowerStatus: (tower_id, status) =>
         set((s) => ({
           towers: s.towers.map((t) => (t.id === tower_id ? { ...t, status } : t)),

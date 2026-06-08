@@ -19,7 +19,7 @@ function KpiCard({ kpi }: { kpi: Kpi }) {
         {kpi.icon}
       </div>
       <div className="min-w-0">
-        <div className="text-xl font-bold leading-tight" style={{ color: kpi.color }}>
+        <div className="text-xl font-bold leading-tight truncate" style={{ color: kpi.color }}>
           {kpi.value}
         </div>
         <div className="text-xs truncate" style={{ color: '#9ca3af' }}>
@@ -52,7 +52,7 @@ export default function StatsBar() {
   ]
 
   return (
-    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
+    <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
       {kpis.map((k) => (
         <KpiCard key={k.label} kpi={k} />
       ))}

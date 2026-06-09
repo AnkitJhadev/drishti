@@ -3,12 +3,18 @@ import fs from 'fs'
 import path from 'path'
 import { logger } from '../utils/logger'
 
+// Managed Postgres (Supabase, Render, Neon, …) requires TLS; local Docker doesn't.
+const dbUrl = process.env.DATABASE_URL ?? ''
+const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')
+
 // Single shared connection pool — reused across the entire app
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 10,               // max 10 concurrent connections
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // Enable SSL for hosted databases (managed providers use their own CA chain).
+  ...(isLocalDb ? {} : { ssl: { rejectUnauthorized: false } }),
 })
 
 pool.on('error', (err) => {

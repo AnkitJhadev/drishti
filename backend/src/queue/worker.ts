@@ -15,8 +15,6 @@ export const redisConnection = new IORedis(
   { maxRetriesPerRequest: null }
 ) as unknown as ConnectionOptions
 
-let ingestCount = 0   // trigger pattern agent every 10 ingestions
-
 export function startWorkers(): void {
 
   // ── Ingest worker ──────────────────────────────────────────────────────
@@ -28,13 +26,11 @@ export function startWorkers(): void {
 
       await runIngestionAgent(complaintId, rawText, source as SourceType)
 
-      // Every 10 complaints, trigger pattern analysis
-      ingestCount++
-      if (ingestCount % 10 === 0) {
-        const { addPatternJob } = await import('./jobs/patternJob')
-        await addPatternJob()
-        logger.info('Pattern job triggered after 10 ingestions')
-      }
+      // Debounced: schedule a pattern pass ~8s after the last ingestion settles,
+      // so clustering runs once on the whole classified batch (and after the
+      // Groq rate-limiter has freed up from classification).
+      const { addPatternJob } = await import('./jobs/patternJob')
+      await addPatternJob(8000)
     },
     {
       connection: redisConnection,

@@ -2,10 +2,23 @@ import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { query, withTransaction } from '../db/postgres'
 import { runApprovalAgent } from '../agents/approvalAgent'
+import { addPatternJob } from '../queue/jobs/patternJob'
 import { emitTowerStatusChanged, emitAlertNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
+
+// POST /recommendations/analyze — manually trigger a pattern-analysis pass
+// (cluster recent complaints → correlate to towers → generate recommendations).
+router.post('/analyze', requireAuth, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    await addPatternJob(0)
+    res.status(202).json({ message: 'Pattern analysis queued' })
+  } catch (err) {
+    logger.error(`POST /recommendations/analyze error: ${String(err)}`)
+    res.status(500).json({ error: 'Failed to queue analysis' })
+  }
+})
 
 // GET /recommendations — pending recommendations
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {

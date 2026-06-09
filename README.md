@@ -192,12 +192,41 @@ All routes except `/auth/login` need `Authorization: Bearer <token>`.
 
 ## Ingestion format (strict)
 
-Only **`.csv`** and **`.pdf`** are accepted, and the content must be structured:
+You **cannot upload arbitrary data** — only **`.csv`** and **`.pdf`** are accepted, and the content
+must follow a fixed structure. Anything else is **rejected with a specific reason** (shown per file
+and per row in the ingestion panel); valid rows in a partially-bad file still go through.
 
-- **CSV** — header `complaint,location,phone`; `location` must be a known city/area.
-- **PDF** — a complaint report with a `Location:` field.
+### CSV — required structure
+Header row **must** contain `complaint` and `location` (`phone` optional):
 
-Invalid files/rows are rejected with a clear reason. See [`sample-data/README.md`](sample-data/README.md).
+```csv
+complaint,location,phone
+"No network signal since this morning",Bandra Mumbai,9820011001
+```
+
+| Column | Rule |
+|---|---|
+| `complaint` | required, non-empty text |
+| `location` | required, **must be a known city/area** (so it can be mapped + correlated to a tower) |
+| `phone` | optional |
+
+### PDF — required structure
+A complaint report that **must contain a `Location:` (or `Service Area:`) field** with a known
+city/area, plus complaint text. See any `sample-data/complaint_*.pdf`.
+
+### What gets rejected (and why)
+| Case | Result |
+|---|---|
+| File is not `.csv` / `.pdf` | rejected at upload |
+| CSV missing `complaint` or `location` header | **whole file** rejected — `"missing required column(s)…"` |
+| Row with empty complaint or location | that **row** rejected |
+| Location not recognised (e.g. `Goa`, `Lucknow`) | that **row/file** rejected — `"unknown location…"` |
+| PDF with no `Location:` field | rejected — `"missing a Location field…"` |
+
+> **Known locations** map 1:1 to the seeded towers (Delhi, Mumbai/Bandra/Andheri, Bengaluru/Whitefield,
+> Chennai/OMR, Kolkata, Hyderabad, Pune/Hinjewadi, Ahmedabad, Jaipur, …). Full list + sample files in
+> [`sample-data/README.md`](sample-data/README.md). Validation lives in `backend/src/parsers/` and
+> `backend/src/routes/ingest.ts`.
 
 ---
 

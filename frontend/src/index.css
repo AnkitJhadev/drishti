@@ -29,6 +29,41 @@
     color: #fff;
   }
 
+  /* All interactive controls feel clickable */
+  button, select, [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* Visible keyboard focus ring (amber, matches the theme) */
+  :focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Slim, dark scrollbars — ops-console look */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #374151 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;

@@ -69,7 +69,8 @@ export default function Dashboard() {
       {/* Floating Approvals button */}
       <button
         onClick={() => setApprovalOpen(true)}
-        className="dr-btn-accent fixed z-[1400] flex items-center gap-2 px-4 py-2.5 text-sm"
+        aria-label={`Open approvals${pendingCount > 0 ? `, ${pendingCount} pending` : ''}`}
+        className="dr-btn-accent fixed z-[1400] flex items-center gap-2 px-4 py-2.5 text-sm shadow-lg transition-transform hover:-translate-y-0.5"
         style={{ bottom: 20, right: 20, borderRadius: 999 }}
       >
         <span>⚖ Approvals</span>

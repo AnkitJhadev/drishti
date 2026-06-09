@@ -101,7 +101,7 @@ drishti/
     └── services/      api (axios) · socket · offline action-queue
 ```
 
-More detail: [`docs/performance.md`](docs/performance.md) (bundle strategy) · [`sample-data/README.md`](sample-data/README.md) (data format) · [`CLAUDE.md`](CLAUDE.md) (full architecture + design decisions).
+More detail: [`docs/performance.md`](docs/performance.md) (bundle strategy) · [`sample-data/README.md`](sample-data/README.md) (data format).
 
 ---
 

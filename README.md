@@ -98,6 +98,32 @@ requirement maps to something real and working here:
 
 ---
 
+## Offline & resilience
+
+Drishti is built to keep working when the network drops — the Chanakya brief calls for
+offline-first, low-bandwidth, hardened clients. How it handles a connection loss:
+
+- **App shell is a PWA** (`vite-plugin-pwa` + Workbox) — the UI loads with no network at all.
+- **All live data is cached in IndexedDB.** Every Zustand store (complaints, towers, alerts,
+  **AI chat + recommendations**, auth) persists locally, so the dashboard renders cached state
+  instantly on reload or offline — including previously received AI answers.
+- **Map tiles cache** with a `CacheFirst` strategy (7-day), so the map still renders offline.
+- **Actions taken offline are queued, not lost.** Approve / reject / resolve while disconnected
+  are written to an IndexedDB **action queue** and **replayed automatically on reconnect**
+  (`window.online` + socket reconnect). A banner shows the pending count and "syncing…" state.
+- **Live updates degrade gracefully** — the Socket.io connection drives a `LIVE / CONNECTING /
+  OFFLINE` indicator; on reconnect it re-syncs and flushes the queue.
+
+```
+offline → optimistic UI update → action queued in IndexedDB
+        ↘ banner: "2 actions queued — will sync on reconnect"
+reconnect → flushQueue() replays each action → banner clears
+```
+
+See `src/services/actionQueue.ts`, `src/stores/*` (persist + `idbStorage`), and `vite.config.ts`.
+
+---
+
 ## Tech stack
 
 **Frontend:** React 18 + TypeScript + Vite · Tailwind · Zustand · React-Leaflet · Recharts · D3 · Three.js · Socket.io-client · PWA

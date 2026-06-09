@@ -64,7 +64,7 @@ Four AI agents drive the pipeline, each with one job:
 |---|---|---|
 | **Ingestion** | a file is uploaded | parse → classify (issue + severity) → geocode → embed → store |
 | **Pattern** | every N complaints | cluster similar complaints → link to nearest tower → write a recommendation |
-| **NL Query** | operator asks a question | retrieve relevant complaints (RAG) → answer, grounded in real data |
+| **NL Query** | operator asks a question | **online:** backend RAG (Groq + Qdrant) → reasoned, grounded answer. **offline:** on-device semantic search in the browser |
 | **Approval** | operator approves/rejects | update statuses → open a resolution ticket |
 
 All agents talk to LLMs through one **provider-agnostic router** (`backend/src/llm/`) that tries
@@ -113,10 +113,16 @@ offline-first, low-bandwidth, hardened clients. How it handles a connection loss
   (`window.online` + socket reconnect). A banner shows the pending count and "syncing…" state.
 - **Live updates degrade gracefully** — the Socket.io connection drives a `LIVE / CONNECTING /
   OFFLINE` indicator; on reconnect it re-syncs and flushes the queue.
-- **On-device AI when offline.** The NL assistant falls back to **in-browser inference** — the same
-  embedding model (`all-MiniLM-L6-v2`) runs client-side via **Transformers.js / ONNX Runtime Web
-  (WASM)**, doing semantic search over cached complaints with **no backend call**. The engine +
-  model are lazy-loaded and cached for offline use; the online path is unchanged. → `src/services/localEmbedder.ts`
+- **On-device AI as the offline fallback.** The NL assistant switches on the connection state:
+  - **Online (default):** calls the backend → full RAG with the LLM (Groq + Qdrant) → reasoned,
+    grounded answers with map/chart hints.
+  - **Offline (no network):** runs **in the browser** — the same embedding model
+    (`all-MiniLM-L6-v2`) executes client-side via **Transformers.js / ONNX Runtime Web (WASM)** and
+    does semantic search over the IndexedDB-cached complaints, with **zero backend calls**.
+
+  The engine is lazy-loaded (its own chunk, excluded from the precache) and the model weights + WASM
+  are cached for offline use. The online path is unchanged. → `src/services/localEmbedder.ts`,
+  `src/components/ai/NLQueryChat.tsx`
 
 ```
 offline → optimistic UI update → action queued in IndexedDB

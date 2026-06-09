@@ -5,8 +5,8 @@ import {
 } from 'recharts'
 import api from '../../services/api'
 import { useComplaintsStore } from '../../stores/complaintsStore'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { sendOrQueue } from '../../services/actionQueue'
+import Modal from '../Modal'
 import type { Severity } from '../../types/complaint'
 
 const SEV_ORDER: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -66,8 +66,6 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
   const resolveInStore = useComplaintsStore((s) => s.resolveComplaint)
   const allComplaints = useComplaintsStore((s) => s.complaints)
 
-  useEscapeKey(true, onClose)
-
   useEffect(() => {
     let active = true
     setLoading(true)
@@ -109,12 +107,7 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
   const contextLabel = detail?.tower_id ? `tower ${detail.tower_id}` : `${(detail?.issue_type ?? '').replace(/_/g, ' ')}`
 
   return (
-    <div
-      className="fixed inset-0 z-[1700] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={(e) => { e.stopPropagation(); onClose() }}
-    >
-      <div className="dr-panel w-full max-w-lg dr-fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Complaint detail">
+    <Modal open onClose={onClose} label="Complaint detail" panelClassName="dr-panel w-full max-w-lg dr-fade-in">
         {/* Header */}
         <div className="dr-panel-header">
           <h2 className="dr-title">Complaint Detail</h2>
@@ -225,7 +218,6 @@ export default function ComplaintDetailModal({ complaintId, onClose }: Props) {
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }

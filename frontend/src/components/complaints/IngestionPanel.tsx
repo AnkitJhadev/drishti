@@ -1,7 +1,7 @@
 import { useState, useRef, type DragEvent, type ChangeEvent } from 'react'
 import api from '../../services/api'
 import { useComplaintsStore } from '../../stores/complaintsStore'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
+import Modal from '../Modal'
 
 interface Props {
   open: boolean
@@ -44,10 +44,6 @@ export default function IngestionPanel({ open, onClose }: Props) {
           return complaints.filter((c) => ids.has(c.id) && c.status !== 'pending').length
         })()
   const done = total > 0 && processed >= total
-
-  useEscapeKey(open, onClose)
-
-  if (!open) return null
 
   function addFiles(list: FileList | null) {
     if (!list) return
@@ -96,19 +92,13 @@ export default function IngestionPanel({ open, onClose }: Props) {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[1700] flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
-      onClick={onClose}
+    <Modal
+      open={open}
+      onClose={onClose}
+      label="Ingest complaints"
+      panelClassName="w-full max-w-lg rounded-lg"
+      panelStyle={{ background: '#111827', border: '1px solid #1f2937' }}
     >
-      <div
-        className="w-full max-w-lg rounded-lg"
-        style={{ background: '#111827', border: '1px solid #1f2937' }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Ingest complaints"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #1f2937' }}>
           <h2 className="text-sm font-semibold" style={{ color: '#f9fafb' }}>
@@ -236,7 +226,6 @@ export default function IngestionPanel({ open, onClose }: Props) {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

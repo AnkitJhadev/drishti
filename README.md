@@ -124,6 +124,25 @@ See `src/services/actionQueue.ts`, `src/stores/*` (persist + `idbStorage`), and 
 
 ---
 
+## Engineering highlights
+
+The harder client-side problems this project solves:
+
+- **Offline action queue (a client-side state machine).** Approvals/resolves made offline can't
+  hang or be lost. `sendOrQueue` updates the UI optimistically, persists the action to IndexedDB
+  on a *network* failure (distinguishing connectivity drops from real 4xx rejections), and replays
+  the queue on reconnect — with a single-flight guard against double-sends and poison-action
+  dropping so the queue can't get stuck. → `src/services/actionQueue.ts`
+- **Reconciling streaming WebSocket updates.** Each complaint streams in twice — once on ingest as
+  `pending`, again after AI classification. A naive append double-rendered every row; the store now
+  **upserts by id**, and a live tracker reconciles a whole ingest batch into a `processed / total`
+  progress bar without re-render churn. → `src/stores/complaintsStore.ts`, `IngestionPanel.tsx`
+- **Rendering performance on low-spec clients.** Three.js (~226 KB gzip) and D3 were dragging first
+  paint, so they're behind `React.lazy` + feature code-splitting and never touch the initial bundle.
+  Before/after numbers in [`docs/performance.md`](docs/performance.md).
+
+---
+
 ## Tech stack
 
 **Frontend:** React 18 + TypeScript + Vite · Tailwind · Zustand · React-Leaflet · Recharts · D3 · Three.js · Socket.io-client · PWA

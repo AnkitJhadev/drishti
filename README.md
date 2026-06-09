@@ -74,6 +74,30 @@ low-bandwidth / disconnected clients.
 
 ---
 
+## Why this project
+
+Drishti was built to demonstrate the exact frontend capabilities Sarvam AI's
+**Frontend Engineer, Chanakya** role calls for — production-grade interfaces for strategic-sector
+and enterprise AI that hold up in offline-first, low-bandwidth, hardened-client environments. Each
+requirement maps to something real and working here:
+
+| Chanakya requirement | Where it lives in Drishti |
+|---|---|
+| Geospatial overlays | React-Leaflet map — status pins, complaint heatmap, click-to-place towers |
+| Simulation UIs | what-if tower-failure impact simulator |
+| Natural-language access layers | RAG chat grounded in real complaint data |
+| Ontology viewers | D3 force-directed network graph |
+| Data ingestion dashboards | drag-drop multi-file upload with strict validation + live agent progress |
+| Complex enterprise workflows | real-time approvals, escalation, and resolution flows |
+| State management | Zustand stores + an offline action queue |
+| Data visualisation | D3 · React-Leaflet · Recharts |
+| REST + WebSocket integration | Axios + Socket.io (live complaints, alerts, tower status) |
+| Performance engineering | code-splitting + lazy-loaded heavy chunks ([`docs/performance.md`](docs/performance.md)) |
+| Offline-first / low-bandwidth | PWA + IndexedDB persistence + queue-and-sync of actions made offline |
+| WebGL / Three.js (bonus) | 3D network command view |
+
+---
+
 ## Tech stack
 
 **Frontend:** React 18 + TypeScript + Vite · Tailwind · Zustand · React-Leaflet · Recharts · D3 · Three.js · Socket.io-client · PWA

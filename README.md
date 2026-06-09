@@ -113,6 +113,10 @@ offline-first, low-bandwidth, hardened clients. How it handles a connection loss
   (`window.online` + socket reconnect). A banner shows the pending count and "syncing…" state.
 - **Live updates degrade gracefully** — the Socket.io connection drives a `LIVE / CONNECTING /
   OFFLINE` indicator; on reconnect it re-syncs and flushes the queue.
+- **On-device AI when offline.** The NL assistant falls back to **in-browser inference** — the same
+  embedding model (`all-MiniLM-L6-v2`) runs client-side via **Transformers.js / ONNX Runtime Web
+  (WASM)**, doing semantic search over cached complaints with **no backend call**. The engine +
+  model are lazy-loaded and cached for offline use; the online path is unchanged. → `src/services/localEmbedder.ts`
 
 ```
 offline → optimistic UI update → action queued in IndexedDB

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type FormEvent } from 'react'
 import ChatMessage from './ChatMessage'
 import { useAIChatStore } from '../../stores/aiChatStore'
+import { useComplaintsStore } from '../../stores/complaintsStore'
 import api from '../../services/api'
 
 interface ChatResponse {
@@ -8,6 +9,9 @@ interface ChatResponse {
   map_highlights: string[]
   chart_data: Record<string, number> | null
 }
+
+// In-browser embedding cache (complaint id → vector) for offline search.
+const localVecCache = new Map<string, number[]>()
 
 const SUGGESTIONS = [
   'Which towers are critical?',
@@ -40,6 +44,53 @@ export default function NLQueryChat() {
     })
     setInput('')
     setLoading(true)
+
+    // Offline → run semantic search on-device (ONNX Runtime Web + WASM in the
+    // browser, no backend). Online path below is unchanged.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      try {
+        const { embedText, cosineSim } = await import('../../services/localEmbedder')
+        const complaints = useComplaintsStore.getState().complaints
+        let content: string
+        if (complaints.length === 0) {
+          content = 'Offline — no cached complaints to search on-device yet.'
+        } else {
+          const qVec = await embedText(trimmed)
+          const scored = [] as { text: string; meta: string; score: number }[]
+          for (const c of complaints.slice(0, 100)) {
+            let vec = localVecCache.get(c.id)
+            if (!vec) {
+              vec = await embedText(c.raw_text)
+              localVecCache.set(c.id, vec)
+            }
+            scored.push({
+              text: c.raw_text,
+              meta: `${c.issue_type ?? 'unknown'} · ${c.severity ?? '—'}${c.location_hint ? ` · ${c.location_hint}` : ''}`,
+              score: cosineSim(qVec, vec),
+            })
+          }
+          scored.sort((a, b) => b.score - a.score)
+          content =
+            'On-device semantic search (offline) — top matches:\n\n' +
+            scored
+              .slice(0, 5)
+              .map((s, i) => `${i + 1}. [${s.meta}] ${s.text.slice(0, 120)}`)
+              .join('\n')
+        }
+        addMessage({ id: crypto.randomUUID(), role: 'assistant', content, timestamp: new Date().toISOString() })
+      } catch {
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content:
+            'Offline on-device search is unavailable — the model isn’t cached yet. Use the assistant once while online to enable offline mode.',
+          timestamp: new Date().toISOString(),
+        })
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
 
     try {
       const { data } = await api.post<ChatResponse>('/ai/chat', { message: trimmed })

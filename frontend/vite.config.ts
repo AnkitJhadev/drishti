@@ -21,8 +21,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Keep the offline precache lean — the heavy 3D scene loads on demand only.
-        globIgnores: ['**/TowerScene-*.js'],
+        // Keep the offline precache lean — the 3D scene and on-device ML engine
+        // load on demand and are cached at runtime (see runtimeCaching below).
+        globIgnores: ['**/TowerScene-*.js', '**/transformers-*.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/tile\.openstreetmap\.org\/.*/i,
@@ -31,8 +32,40 @@ export default defineConfig({
               cacheName: 'osm-tiles',
               expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 7 }
             }
+          },
+          {
+            // On-device model weights (Transformers.js pulls from the HF CDN).
+            urlPattern: /^https:\/\/huggingface\.co\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'onnx-model',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            // ONNX Runtime Web WASM binaries (served from jsDelivr).
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'onnx-runtime',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          },
+          {
+            // On-device ML engine chunk — cached on first (online) use so it's
+            // available offline without bloating the initial precache.
+            urlPattern: ({ url }: { url: URL }) => url.pathname.includes('/transformers-'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'onnx-engine',
+              expiration: { maxEntries: 5, maxAgeSeconds: 60 * 60 * 24 * 30 }
+            }
           }
-        ]
+        ],
+        // The ONNX model weights are large — don't fail SW install over the 2MB default.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
       }
     })
   ],

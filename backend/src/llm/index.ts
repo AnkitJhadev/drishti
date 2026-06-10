@@ -94,7 +94,10 @@ async function runOnProvider(
         if (tc.type !== 'function') continue
         let args: Record<string, unknown> = {}
         try {
-          args = JSON.parse(tc.function.arguments || '{}')
+          // Llama sometimes emits literal "null" / a non-object — JSON.parse("null")
+          // returns null, which would crash tool executors that read input.x.
+          const parsed: unknown = JSON.parse(tc.function.arguments || '{}')
+          if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>
         } catch {
           args = {}
         }

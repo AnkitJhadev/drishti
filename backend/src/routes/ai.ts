@@ -28,10 +28,11 @@ router.post('/chat', requireAuth, async (req: Request, res: Response): Promise<v
       result = await runNLQueryAgent(message)
     } catch (agentErr) {
       logger.error(`NL agent error: ${String(agentErr)}`)
-      // Graceful fallback (e.g. no Anthropic credits) — still a valid response
+      // Graceful fallback — every LLM provider was unavailable (e.g. all keys
+      // rate-limited). Still return a valid response so the chat doesn't error out.
       result = {
         answer:
-          'I could not reach the AI service right now. Please ensure the Anthropic API has available credits, then try again.',
+          'The AI service is busy right now (all LLM providers are rate-limited). Please try again in a minute.',
       }
     }
 

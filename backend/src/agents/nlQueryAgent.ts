@@ -36,10 +36,13 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'get_tower_status',
-    description: 'Get towers, optionally filtered by status. Use to find critical/degraded/offline towers.',
+    description:
+      'Look up towers. Pass tower_id to fetch ONE specific tower of any status (e.g. to check if a tower exists). ' +
+      'Pass status to filter (critical/degraded/offline). Pass neither to list ALL towers. Returns at most one row per call when tower_id is given.',
     input_schema: {
       type: 'object' as const,
       properties: {
+        tower_id: { type: 'string', description: 'A specific tower id, e.g. "T-121"' },
         status: { type: 'string', enum: ['operational', 'degraded', 'critical', 'offline'] },
       },
       required: [],
@@ -101,19 +104,29 @@ function makeExecutor(ctx: ToolContext) {
     }
 
     if (name === 'get_tower_status') {
+      const towerId = (input.tower_id as string | undefined)?.trim()
       const status = input.status as string | undefined
-      const rows = status
-        ? await query<{ id: string; name: string; status: string; active_complaints: number; affected_users: number }>(
-            `SELECT id, name, status, active_complaints, affected_users
-             FROM towers WHERE status = $1 ORDER BY affected_users DESC`,
-            [status]
-          )
-        : await query<{ id: string; name: string; status: string; active_complaints: number; affected_users: number }>(
-            `SELECT id, name, status, active_complaints, affected_users
-             FROM towers WHERE status != 'operational' ORDER BY affected_users DESC`
-          )
+      const cols = 'id, name, status, active_complaints, affected_users'
+      type Row = { id: string; name: string; status: string; active_complaints: number; affected_users: number }
 
-      rows.forEach((t) => ctx.highlights.add(t.id))   // capture for map hint
+      let rows: Row[]
+      if (towerId) {
+        // Specific tower lookup — any status (so newly-added/operational towers are found).
+        rows = await query<Row>(`SELECT ${cols} FROM towers WHERE id = $1`, [towerId])
+        if (rows.length === 0) return { towers: [], note: `No tower found with id "${towerId}".` }
+      } else if (status) {
+        rows = await query<Row>(`SELECT ${cols} FROM towers WHERE status = $1 ORDER BY affected_users DESC`, [status])
+      } else {
+        // List all towers, worst-status first.
+        rows = await query<Row>(
+          `SELECT ${cols} FROM towers
+           ORDER BY CASE status WHEN 'critical' THEN 1 WHEN 'offline' THEN 2 WHEN 'degraded' THEN 3 ELSE 4 END,
+                    affected_users DESC`
+        )
+      }
+
+      // Highlight on the map only for targeted lookups (not the full list).
+      if (towerId || status) rows.forEach((t) => ctx.highlights.add(t.id))
       return { towers: rows }
     }
 

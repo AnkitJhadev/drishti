@@ -1,4 +1,4 @@
-export type ComplaintSource = 'email' | 'pdf' | 'image' | 'sms' | 'csv'
+export type ComplaintSource = 'email' | 'pdf' | 'image' | 'sms' | 'csv' | 'json'
 
 export type IssueType =
   | 'network_outage'

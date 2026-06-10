@@ -1,0 +1,7 @@
+[
+  { "complaint": "No network signal in Bandra since morning, completely dead.", "location": "Bandra Mumbai", "phone": "9820012001" },
+  { "complaint": "Calls keep dropping every few minutes in Bandra west.", "location": "Bandra Mumbai", "phone": "9820012002" },
+  { "complaint": "Internet extremely slow in Whitefield, cannot join video calls.", "location": "Whitefield Bengaluru", "phone": "9845012003" },
+  { "complaint": "Total outage near MG Road, no service for hours.", "location": "MG Road Bengaluru", "phone": "9845012004" },
+  { "complaint": "Frequent call drops in Delhi North sector all day.", "location": "Delhi North", "phone": "9811012005" }
+]

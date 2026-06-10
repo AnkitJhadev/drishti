@@ -3,6 +3,7 @@ import multer from 'multer'
 import { requireAuth } from '../middleware/auth'
 import { parseStructuredPdf, PdfFormatError } from '../parsers/pdfParser'
 import { parseCsv, CsvFormatError } from '../parsers/csvParser'
+import { parseJson, JsonFormatError } from '../parsers/jsonParser'
 import { geocodeLocation } from '../utils/geocoder'
 import { query } from '../db/postgres'
 import { addIngestJob } from '../queue/jobs/ingestJob'
@@ -12,18 +13,20 @@ import type { ComplaintSource } from '../types/complaint'
 
 const router = Router()
 
-// ── Accepted input: structured CSV and PDF complaint reports only ─────────
+// ── Accepted input: structured CSV, PDF and JSON complaint reports ────────
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')
+    const name = file.originalname.toLowerCase()
+    const isPdf = file.mimetype === 'application/pdf' || name.endsWith('.pdf')
     // Browsers often send text/plain for .csv, so also match by extension.
     const isCsv =
       file.mimetype === 'text/csv' ||
       file.mimetype === 'application/vnd.ms-excel' ||
-      file.originalname.toLowerCase().endsWith('.csv')
-    cb(null, isPdf || isCsv)
+      name.endsWith('.csv')
+    const isJson = file.mimetype === 'application/json' || name.endsWith('.json')
+    cb(null, isPdf || isCsv || isJson)
   },
 })
 
@@ -39,15 +42,19 @@ interface Rejection {
   reason: string
 }
 
-function detectSource(mimetype: string, originalname: string): 'pdf' | 'csv' {
-  if (mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf')) return 'pdf'
+type FileSource = 'pdf' | 'csv' | 'json'
+
+function detectSource(mimetype: string, originalname: string): FileSource {
+  const name = originalname.toLowerCase()
+  if (mimetype === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
+  if (mimetype === 'application/json' || name.endsWith('.json')) return 'json'
   return 'csv'
 }
 
 // ── Parse + validate one file into insertable records + rejection reasons ──
 async function extractRecords(
   file: Express.Multer.File,
-  source: 'pdf' | 'csv'
+  source: FileSource
 ): Promise<{ records: ExtractedRecord[]; rejections: Rejection[] }> {
   const rejections: Rejection[] = []
 
@@ -56,8 +63,8 @@ async function extractRecords(
     return { records: [{ text, locationHint, sender }], rejections }
   }
 
-  // CSV
-  const { rows, rejected } = parseCsv(file.buffer)
+  // CSV or JSON — both yield validated { text, location, sender, timestamp } rows.
+  const { rows, rejected } = source === 'json' ? parseJson(file.buffer) : parseCsv(file.buffer)
   for (const r of rejected) {
     rejections.push({ file: file.originalname, reason: `row ${r.row}: ${r.reason}` })
   }
@@ -76,7 +83,7 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
     const files = req.files as Express.Multer.File[] | undefined
 
     if (!files || files.length === 0) {
-      res.status(400).json({ error: 'No valid files uploaded. Only structured .csv and .pdf complaint reports are accepted.' })
+      res.status(400).json({ error: 'No valid files uploaded. Only structured .csv, .pdf and .json complaint reports are accepted.' })
       return
     }
 
@@ -94,7 +101,9 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
       } catch (parseErr) {
         // Format errors are expected (bad structure) — report them clearly.
         const reason =
-          parseErr instanceof CsvFormatError || parseErr instanceof PdfFormatError
+          parseErr instanceof CsvFormatError ||
+          parseErr instanceof PdfFormatError ||
+          parseErr instanceof JsonFormatError
             ? parseErr.message
             : `could not parse file (${String(parseErr)})`
         logger.warn(`Rejected ${file.originalname}: ${reason}`)

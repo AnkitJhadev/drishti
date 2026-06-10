@@ -202,9 +202,9 @@ All routes except `/auth/login` need `Authorization: Bearer <token>`.
 
 ## Ingestion format (strict)
 
-You **cannot upload arbitrary data** — only **`.csv`** and **`.pdf`** are accepted, and the content
-must follow a fixed structure. Anything else is **rejected with a specific reason** (shown per file
-and per row in the ingestion panel); valid rows in a partially-bad file still go through.
+You **cannot upload arbitrary data** — only **`.csv`**, **`.pdf`** and **`.json`** are accepted, and
+the content must follow a fixed structure. Anything else is **rejected with a specific reason** (shown
+per file and per row in the ingestion panel); valid rows in a partially-bad file still go through.
 
 ### CSV — required structure
 Header row **must** contain `complaint` and `location` (`phone` optional):
@@ -224,10 +224,17 @@ complaint,location,phone
 A complaint report that **must contain a `Location:` (or `Service Area:`) field** with a known
 city/area, plus complaint text. See any `sample-data/complaint_*.pdf`.
 
+### JSON — required structure
+An array of objects (or `{ "complaints": [...] }`); each item needs `complaint` + a known `location`
+(`phone`/`timestamp` optional). Same per-row validation as CSV. See `sample-data/complaints.json`:
+```json
+[{ "complaint": "No signal in Bandra", "location": "Bandra Mumbai", "phone": "9820012001" }]
+```
+
 ### What gets rejected (and why)
 | Case | Result |
 |---|---|
-| File is not `.csv` / `.pdf` | rejected at upload |
+| File is not `.csv` / `.pdf` / `.json` | rejected at upload |
 | CSV missing `complaint` or `location` header | **whole file** rejected — `"missing required column(s)…"` |
 | Row with empty complaint or location | that **row** rejected |
 | Location not recognised (e.g. `Goa`, `Lucknow`) | that **row/file** rejected — `"unknown location…"` |

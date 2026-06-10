@@ -19,7 +19,7 @@ interface Result {
   rejected?: Rejection[]
 }
 
-const ACCEPTED = '.pdf,.csv'
+const ACCEPTED = '.pdf,.csv,.json'
 
 export default function IngestionPanel({ open, onClose }: Props) {
   const [files, setFiles] = useState<File[]>([])
@@ -49,11 +49,11 @@ export default function IngestionPanel({ open, onClose }: Props) {
     if (!list) return
     // Client-side guard: only .csv / .pdf
     const all = Array.from(list)
-    const ok = all.filter((f) => /\.(csv|pdf)$/i.test(f.name))
-    const bad = all.filter((f) => !/\.(csv|pdf)$/i.test(f.name))
+    const ok = all.filter((f) => /\.(csv|pdf|json)$/i.test(f.name))
+    const bad = all.filter((f) => !/\.(csv|pdf|json)$/i.test(f.name))
     setFiles((prev) => [...prev, ...ok])
     setResult(null)
-    setError(bad.length ? `Only .csv and .pdf files are accepted — ignored: ${bad.map((f) => f.name).join(', ')}` : '')
+    setError(bad.length ? `Only .csv, .pdf and .json files are accepted — ignored: ${bad.map((f) => f.name).join(', ')}` : '')
     setRejected([])
   }
 
@@ -125,7 +125,7 @@ export default function IngestionPanel({ open, onClose }: Props) {
               Drag & drop files here, or click to browse
             </p>
             <p className="text-xs mt-1" style={{ color: '#6b7280' }}>
-              Structured <strong style={{ color: '#9ca3af' }}>.csv</strong> or <strong style={{ color: '#9ca3af' }}>.pdf</strong> complaint reports only
+              Structured <strong style={{ color: '#9ca3af' }}>.csv</strong>, <strong style={{ color: '#9ca3af' }}>.pdf</strong> or <strong style={{ color: '#9ca3af' }}>.json</strong> complaint reports only
             </p>
             <input
               ref={inputRef}
@@ -204,6 +204,9 @@ export default function IngestionPanel({ open, onClose }: Props) {
             </div>
             <div className="mt-0.5">
               <strong>PDF</strong>: complaint report with a <code style={{ color: '#fcd34d' }}>Location:</code> field.
+            </div>
+            <div className="mt-0.5">
+              <strong>JSON</strong>: array of <code style={{ color: '#fcd34d' }}>{'{ complaint, location, phone? }'}</code> objects.
             </div>
           </div>
 

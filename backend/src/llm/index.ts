@@ -122,6 +122,24 @@ function hasKey(provider: Provider): boolean {
   return Boolean(key && !key.startsWith('your-'))
 }
 
+// ── Circuit breaker for fallback providers ────────────────────────────────
+// When a fallback (Gemini/Together) is rate-limited/quota-exhausted, park it on
+// a cooldown so we stop wasting a call + latency on every request. Groq is the
+// primary and is never parked (its key rotation handles limits).
+const COOLDOWN_MS = 5 * 60_000
+const cooldownUntil: Partial<Record<Provider, number>> = {}
+
+function isAvailable(p: Provider): boolean {
+  const until = cooldownUntil[p]
+  return !until || Date.now() >= until
+}
+
+function isRateLimited(err: unknown): boolean {
+  const e = err as { status?: number; message?: string }
+  if (e?.status === 429) return true
+  return /\b429\b|too many requests|quota/i.test(String(e?.message ?? err))
+}
+
 // Errors that mean "this key is exhausted/unusable — try the next one"
 // (rate-limited, bad/blocked key, or a transient server error).
 function isKeyExhausted(err: unknown): boolean {
@@ -175,10 +193,13 @@ export async function runLLMAgent(
   toolExecutor: ToolExecutor,
   opts: RunOptions = {}
 ): Promise<string> {
-  const chain = routeFor(task).filter(hasKey)
-  if (chain.length === 0) {
+  const configured = routeFor(task).filter(hasKey)
+  if (configured.length === 0) {
     throw new Error('No LLM provider configured. Set GROQ_API_KEY in .env')
   }
+  // Skip fallbacks currently on cooldown (e.g. Gemini quota exhausted).
+  let chain = configured.filter(isAvailable)
+  if (chain.length === 0) chain = configured // all parked — try them anyway as a last resort
   let lastError: unknown
 
   for (const provider of chain) {
@@ -193,7 +214,13 @@ export async function runLLMAgent(
       return await runOnProvider(togetherClient, TOGETHER_MODEL, 'together', systemPrompt, userMessage, tools, toolExecutor, opts)
     } catch (err) {
       lastError = err
-      logger.warn(`Provider ${provider} failed for task ${task}: ${String(err)} — trying next`)
+      // Park a rate-limited fallback so the next request skips it (Groq stays on).
+      if (provider !== 'groq' && isRateLimited(err)) {
+        cooldownUntil[provider] = Date.now() + COOLDOWN_MS
+        logger.warn(`Provider ${provider} rate-limited — skipping for ${COOLDOWN_MS / 60000} min`)
+      } else {
+        logger.warn(`Provider ${provider} failed for task ${task}: ${String(err)} — trying next`)
+      }
     }
   }
 

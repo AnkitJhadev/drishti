@@ -253,6 +253,22 @@ cd frontend && npm run typecheck && npm run build
 
 ---
 
+## Security (dependency posture)
+
+`npm audit` status, with the reasoning behind what's fixed vs. accepted:
+
+- **Backend: 0 known vulnerabilities.** The `protobufjs` advisories (transitive via
+  `onnxruntime` ← `@xenova/transformers`) are resolved with an `overrides` pin to a patched
+  `protobufjs`, **verified to keep on-device embeddings working** (the model still loads + embeds).
+  The unused `voyageai` SDK was removed, clearing its `qs` advisories.
+- **Frontend: 2 moderate, dev-server-only.** A Vite dev-server path-traversal advisory — it only
+  affects `vite dev` on a local machine, **not the production build** (which ships static files).
+  The sole fix is a Vite **major upgrade** (breaking, risks the build + PWA config), so it's an
+  accepted, assessed risk rather than a forced fix. `npm audit fix --force` is intentionally avoided
+  (it downgrades `@xenova/transformers` and breaks embeddings).
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |

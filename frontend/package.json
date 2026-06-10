@@ -51,5 +51,9 @@
     "workbox-precaching": "^7.1.0",
     "workbox-routing": "^7.1.0",
     "workbox-strategies": "^7.1.0"
+  },
+  "overrides": {
+    "protobufjs": "8.6.2",
+    "esbuild": "0.25.10"
   }
 }

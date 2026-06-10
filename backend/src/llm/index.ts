@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
-import { groqClient, GROQ_MODEL } from './groq'
+import { groqClients, GROQ_MODEL } from './groq'
 import { togetherClient, TOGETHER_MODEL } from './together'
 import { runGeminiTools } from './gemini'
 import { routeFor, type AgentTask, type Provider } from './router'
@@ -34,27 +34,23 @@ function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[
   })
 }
 
-function clientFor(provider: Provider): { client: OpenAI; model: string } {
-  if (provider === 'together') return { client: togetherClient, model: TOGETHER_MODEL }
-  return { client: groqClient, model: GROQ_MODEL }
-}
-
 export interface RunOptions {
   // Force exactly one call to this tool and return immediately after executing
   // it — no follow-up completion. Halves token cost for single-shot tasks.
   forceTool?: string
 }
 
-// One full tool-calling loop against a single OpenAI-compatible provider.
+// One full tool-calling loop against a single OpenAI-compatible client.
 async function runOnProvider(
-  provider: Provider,
+  client: OpenAI,
+  model: string,
+  label: string,
   systemPrompt: string,
   userMessage: string,
   tools: Anthropic.Tool[],
   toolExecutor: ToolExecutor,
   opts: RunOptions = {}
 ): Promise<string> {
-  const { client, model } = clientFor(provider)
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userMessage },
@@ -81,7 +77,7 @@ async function runOnProvider(
       } catch (err) {
         const is400 = (err as { status?: number }).status === 400
         if (is400 && attempt === 0) {
-          logger.warn(`[${provider}] malformed tool call, retrying once`)
+          logger.warn(`[${label}] malformed tool call, retrying once`)
           continue
         }
         throw err
@@ -102,7 +98,7 @@ async function runOnProvider(
         } catch {
           args = {}
         }
-        logger.debug(`[${provider}] tool: ${tc.function.name}`)
+        logger.debug(`[${label}] tool: ${tc.function.name}`)
         const result = await toolExecutor(tc.function.name, args)
         messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) })
       }
@@ -116,13 +112,55 @@ async function runOnProvider(
   return ''
 }
 
-// A provider is usable only if its API key is actually configured.
+// A provider is usable only if its API key(s) are actually configured.
 function hasKey(provider: Provider): boolean {
-  const key =
-    provider === 'together' ? process.env.TOGETHER_API_KEY
-    : provider === 'gemini' ? process.env.GEMINI_API_KEY
-    : process.env.GROQ_API_KEY
+  if (provider === 'groq') return groqClients.length > 0
+  const key = provider === 'together' ? process.env.TOGETHER_API_KEY : process.env.GEMINI_API_KEY
   return Boolean(key && !key.startsWith('your-'))
+}
+
+// Errors that mean "this key is exhausted/unusable — try the next one"
+// (rate-limited, bad/blocked key, or a transient server error).
+function isKeyExhausted(err: unknown): boolean {
+  const status = (err as { status?: number }).status
+  return status === 429 || status === 401 || status === 403 || (status !== undefined && status >= 500)
+}
+
+// Rotating pointer so consecutive calls spread across keys instead of always
+// hammering key #1 first.
+let groqStart = 0
+
+// Try each Groq key in turn; rotate past a throttled/failed key. Throws only
+// if every key is exhausted (→ caller falls through to Gemini).
+async function runOnGroq(
+  systemPrompt: string,
+  userMessage: string,
+  tools: Anthropic.Tool[],
+  toolExecutor: ToolExecutor,
+  opts: RunOptions
+): Promise<string> {
+  const n = groqClients.length
+  let lastError: unknown
+  for (let i = 0; i < n; i++) {
+    const idx = (groqStart + i) % n
+    try {
+      const result = await runOnProvider(
+        groqClients[idx], GROQ_MODEL, `groq#${idx + 1}`,
+        systemPrompt, userMessage, tools, toolExecutor, opts
+      )
+      groqStart = idx // stick with the key that just worked
+      return result
+    } catch (err) {
+      lastError = err
+      if (isKeyExhausted(err)) {
+        logger.warn(`Groq key #${idx + 1} exhausted (status ${(err as { status?: number }).status}) — rotating to next key`)
+        groqStart = (idx + 1) % n
+        continue
+      }
+      throw err // non-quota error (e.g. bad request) — don't burn the other keys
+    }
+  }
+  throw lastError ?? new Error('All Groq keys exhausted')
 }
 
 // Public entry — runs an agent task with automatic provider fallback.
@@ -145,7 +183,11 @@ export async function runLLMAgent(
       if (provider === 'gemini') {
         return await runGeminiTools(systemPrompt, userMessage, tools, toolExecutor, opts)
       }
-      return await runOnProvider(provider, systemPrompt, userMessage, tools, toolExecutor, opts)
+      if (provider === 'groq') {
+        return await runOnGroq(systemPrompt, userMessage, tools, toolExecutor, opts)
+      }
+      // together
+      return await runOnProvider(togetherClient, TOGETHER_MODEL, 'together', systemPrompt, userMessage, tools, toolExecutor, opts)
     } catch (err) {
       lastError = err
       logger.warn(`Provider ${provider} failed for task ${task}: ${String(err)} — trying next`)

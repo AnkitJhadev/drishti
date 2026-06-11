@@ -96,6 +96,20 @@ requirement maps to something real and working here:
 | Offline-first / low-bandwidth | PWA + IndexedDB persistence + queue-and-sync of actions made offline |
 | WebGL / Three.js (bonus) | 3D network command view |
 
+### Key engineering decisions (built for the hardened-client brief)
+
+- **Offline-first caching** — every Zustand store (complaints, towers, alerts, **AI chat +
+  recommendations**, auth, action-queue) persists to **IndexedDB** via `idb-keyval`; the PWA service
+  worker precaches the app shell and `CacheFirst`-caches map tiles + the on-device model.
+- **On-device AI fallback** — the NL assistant runs the embedding model **in the browser**
+  (Transformers.js → ONNX Runtime Web / WASM) for semantic search with **zero backend calls** when offline.
+- **Offline action queue** — approvals/resolves made offline are persisted and **replayed on reconnect**.
+- **Resilient LLM layer** — **multi-key Groq rotation** → Gemini fallback with a **rate-limit cooldown**,
+  so a throttled key/provider never breaks a request.
+- **Performance** — heavy chunks (Three.js, D3, recharts) lazy-loaded off the critical path.
+- **Strict validated ingestion** — CSV / PDF / JSON only, with **zod** request validation + per-row rejection.
+- **Production hygiene** — TypeScript end-to-end, CI (typecheck + tests + build), unit tests, dependency-CVE pins.
+
 ---
 
 ## Offline & resilience

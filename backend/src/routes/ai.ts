@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { runNLQueryAgent } from '../agents/nlQueryAgent'
-import { query } from '../db/postgres'
+import { getRecentHistory, recordUserMessage, recordAssistantMessage } from '../memory/chatMemory'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -17,15 +17,14 @@ router.post('/chat', requireAuth, async (req: Request, res: Response): Promise<v
       return
     }
 
-    // Persist the user message
-    await query(
-      `INSERT INTO chat_messages (operator_id, role, content) VALUES ($1, 'user', $2)`,
-      [operator.id, message]
-    )
+    // Short-term memory: fetch recent turns BEFORE recording the new one,
+    // then persist the user message.
+    const history = await getRecentHistory(operator.id)
+    await recordUserMessage(operator.id, message)
 
     let result: { answer: string; map_highlights?: string[]; chart_data?: Record<string, number> }
     try {
-      result = await runNLQueryAgent(message)
+      result = await runNLQueryAgent(message, history)
     } catch (agentErr) {
       logger.error(`NL agent error: ${String(agentErr)}`)
       // Graceful fallback — every LLM provider was unavailable (e.g. all keys
@@ -36,17 +35,7 @@ router.post('/chat', requireAuth, async (req: Request, res: Response): Promise<v
       }
     }
 
-    // Persist the assistant message with hints
-    await query(
-      `INSERT INTO chat_messages (operator_id, role, content, map_highlights, chart_data)
-       VALUES ($1, 'assistant', $2, $3, $4)`,
-      [
-        operator.id,
-        result.answer,
-        result.map_highlights ? JSON.stringify(result.map_highlights) : null,
-        result.chart_data ? JSON.stringify(result.chart_data) : null,
-      ]
-    )
+    await recordAssistantMessage(operator.id, result.answer, result.map_highlights, result.chart_data)
 
     res.json({
       answer: result.answer,

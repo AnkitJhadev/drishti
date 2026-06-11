@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
 import { query } from '../db/postgres'
 import { retrieveRelevant } from '../rag/retriever'
+import { formatHistory, type ChatTurn } from '../memory/chatMemory'
 import { logger } from '../utils/logger'
 
 export interface NLQueryResult {
@@ -150,8 +151,8 @@ function makeExecutor(ctx: ToolContext) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────
-export async function runNLQueryAgent(question: string): Promise<NLQueryResult> {
-  logger.info(`NL query agent: "${question.slice(0, 80)}"`)
+export async function runNLQueryAgent(question: string, history: ChatTurn[] = []): Promise<NLQueryResult> {
+  logger.info(`NL query agent: "${question.slice(0, 80)}"${history.length ? ` (+${history.length} turns context)` : ''}`)
 
   const ctx: ToolContext = { highlights: new Set(), chart: null }
 
@@ -165,9 +166,18 @@ Guidelines:
 - Use get_cluster_summary for active incident clusters.
 - Ground every claim in tool data. If the data does not contain the answer,
   say so plainly — never invent towers, numbers, or incidents.
-- Be concise and operational. Reference tower IDs (e.g. T-105) and real counts.`
+- Be concise and operational. Reference tower IDs (e.g. T-105) and real counts.
+- The operator may refer to earlier turns ("it", "that tower", "the others").
+  Use the prior conversation only to resolve such references — still ground
+  every fact in fresh tool calls.`
 
-  const answer = await runAgent(systemPrompt, question, TOOLS, makeExecutor(ctx), 'nl_query')
+  // Fold short-term conversation context into the user turn (keeps the LLM
+  // message plumbing unchanged across all providers).
+  const userMessage = history.length
+    ? `Prior conversation:\n${formatHistory(history)}\n\nNew question: ${question}`
+    : question
+
+  const answer = await runAgent(systemPrompt, userMessage, TOOLS, makeExecutor(ctx), 'nl_query')
 
   return {
     answer,

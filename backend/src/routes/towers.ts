@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
+import { validateBody } from '../middleware/validate'
+import { createTowerSchema, type CreateTowerBody } from '../schemas/tower.schema'
 import { query } from '../db/postgres'
 import { emitTowerAdded } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
@@ -14,32 +16,10 @@ async function nextTowerId(): Promise<string> {
 }
 
 // POST /towers — manually add a new tower (e.g. company opens a new site)
-router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuth, validateBody(createTowerSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, lat, lng, coverage_radius_km } = req.body as {
-      name?: string
-      lat?: number
-      lng?: number
-      coverage_radius_km?: number
-    }
-
-    // ── Validate ──────────────────────────────────────────────────────────
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      res.status(400).json({ error: 'Tower name is required' })
-      return
-    }
-    if (typeof lat !== 'number' || lat < -90 || lat > 90) {
-      res.status(400).json({ error: 'Valid latitude (-90 to 90) is required' })
-      return
-    }
-    if (typeof lng !== 'number' || lng < -180 || lng > 180) {
-      res.status(400).json({ error: 'Valid longitude (-180 to 180) is required' })
-      return
-    }
-    const radius =
-      typeof coverage_radius_km === 'number' && coverage_radius_km > 0
-        ? Math.min(coverage_radius_km, 50)
-        : 2.0
+    const { name, lat, lng, coverage_radius_km } = req.body as CreateTowerBody
+    const radius = coverage_radius_km ?? 2.0
 
     const id = await nextTowerId()
 

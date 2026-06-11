@@ -2,20 +2,17 @@ import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { runNLQueryAgent } from '../agents/nlQueryAgent'
 import { getRecentHistory, recordUserMessage, recordAssistantMessage } from '../memory/chatMemory'
+import { validateBody } from '../middleware/validate'
+import { chatSchema, type ChatBody } from '../schemas/ai.schema'
 import { logger } from '../utils/logger'
 
 const router = Router()
 
 // POST /ai/chat — natural language query → RAG → grounded answer
-router.post('/chat', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/chat', requireAuth, validateBody(chatSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { message } = req.body as { message?: string }
+    const { message } = req.body as ChatBody
     const operator = req.operator!
-
-    if (!message || message.trim().length === 0) {
-      res.status(400).json({ error: 'Message is required' })
-      return
-    }
 
     // Short-term memory: fetch recent turns BEFORE recording the new one,
     // then persist the user message.

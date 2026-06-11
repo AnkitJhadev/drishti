@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { query } from '../db/postgres'
 import { requireAuth } from '../middleware/auth'
+import { validateBody } from '../middleware/validate'
+import { loginSchema, type LoginBody } from '../schemas/auth.schema'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -16,14 +18,9 @@ interface OperatorRow {
 }
 
 // POST /auth/login
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', validateBody(loginSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body as { email?: string; password?: string }
-
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' })
-      return
-    }
+    const { email, password } = req.body as LoginBody
 
     const rows = await query<OperatorRow>(
       'SELECT id, name, email, password_hash, role FROM operators WHERE email = $1',

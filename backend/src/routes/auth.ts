@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { prisma } from '../db/prisma'
+import { JWT_SECRET } from '../config'
 import { requireAuth } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
 import { loginSchema, type LoginBody } from '../schemas/auth.schema'
@@ -9,8 +11,18 @@ import { logger } from '../utils/logger'
 
 const router = Router()
 
+// Brute-force protection. Generous enough for a human retyping a password,
+// useless for credential stuffing.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts — try again in 15 minutes' },
+})
+
 // POST /auth/login
-router.post('/login', validateBody(loginSchema), async (req: Request, res: Response): Promise<void> => {
+router.post('/login', loginLimiter, validateBody(loginSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as LoginBody
 
@@ -36,7 +48,7 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
 
     const token = jwt.sign(
       { id: operator.id, email: operator.email, role: operator.role },
-      process.env.JWT_SECRET ?? 'dev-secret',
+      JWT_SECRET,
       { expiresIn: '8h' }
     )
 

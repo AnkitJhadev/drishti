@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { JWT_SECRET } from '../config'
 
 export interface JwtPayload {
   id: string
@@ -27,7 +28,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = authHeader.slice(7)
 
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret') as JwtPayload
+    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload
     req.operator = payload
     next()
   } catch {

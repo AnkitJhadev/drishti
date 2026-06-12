@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import rateLimit from 'express-rate-limit'
 import { requireAuth } from '../middleware/auth'
 import { runNLQueryAgent } from '../agents/nlQueryAgent'
 import { getRecentHistory, recordUserMessage, recordAssistantMessage } from '../memory/chatMemory'
@@ -8,8 +9,19 @@ import { logger } from '../utils/logger'
 
 const router = Router()
 
+// Each chat turn costs LLM tokens against a shared free-tier daily quota
+// (~100K/day on Groq). Per-IP throttle so one scripted client can't drain it
+// and kill the demo for everyone else.
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Slow down — max 8 questions per minute' },
+})
+
 // POST /ai/chat — natural language query → RAG → grounded answer
-router.post('/chat', requireAuth, validateBody(chatSchema), async (req: Request, res: Response): Promise<void> => {
+router.post('/chat', requireAuth, chatLimiter, validateBody(chatSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { message } = req.body as ChatBody
     const operator = req.operator!

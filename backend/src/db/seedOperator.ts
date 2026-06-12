@@ -29,5 +29,7 @@ export async function seedOperator(): Promise<void> {
     [DEFAULT_OPERATOR.name, DEFAULT_OPERATOR.email, password_hash, DEFAULT_OPERATOR.role]
   )
 
-  logger.info(`Default operator seeded — email: ${DEFAULT_OPERATOR.email} | password: ${DEFAULT_OPERATOR.password}`)
+  // Never log the password — Docker/CloudWatch logs persist. It lives on the
+  // login page (pre-filled demo credentials) and in the README.
+  logger.info(`Default operator seeded — email: ${DEFAULT_OPERATOR.email}`)
 }

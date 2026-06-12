@@ -1,6 +1,7 @@
 import { Server } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import jwt from 'jsonwebtoken'
+import { JWT_SECRET, FRONTEND_URL } from '../config'
 import { logger } from '../utils/logger'
 import type { EnrichedComplaint } from '../types/complaint'
 import type { Alert } from '../types/alert'
@@ -12,23 +13,26 @@ let io: Server | null = null
 export function initWebSocket(httpServer: HttpServer): void {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+      origin: FRONTEND_URL,
       credentials: true,
     },
   })
 
-  // Optional JWT auth — allow connection but log identity if provided
+  // Mandatory JWT auth — the event stream carries every complaint, alert and
+  // recommendation, so an unauthenticated socket would be a data leak.
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token as string | undefined
-    if (token) {
-      try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret')
-        ;(socket.data as { operator?: unknown }).operator = payload
-      } catch {
-        // invalid token — still allow connection for demo resilience
-      }
+    if (!token) {
+      next(new Error('Authentication required'))
+      return
     }
-    next()
+    try {
+      const payload = jwt.verify(token, JWT_SECRET)
+      ;(socket.data as { operator?: unknown }).operator = payload
+      next()
+    } catch {
+      next(new Error('Token expired or invalid'))
+    }
   })
 
   io.on('connection', (socket) => {

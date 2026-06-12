@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model alerts {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type            String    @db.VarChar(50)
+  severity        String    @db.VarChar(20)
+  title           String    @db.VarChar(255)
+  message         String
+  tower_id        String?   @db.VarChar(50)
+  cluster_id      String?   @db.Uuid
+  read            Boolean?  @default(false)
+  action_required Boolean?  @default(false)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  clusters        clusters? @relation(fields: [cluster_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  towers          towers?   @relation(fields: [tower_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([created_at(sort: Desc)], map: "idx_alerts_created_at")
+  @@index([read], map: "idx_alerts_read")
+}
+
+model chat_messages {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  operator_id    String?    @db.Uuid
+  role           String     @db.VarChar(20)
+  content        String
+  map_highlights Json?
+  chart_data     Json?
+  created_at     DateTime?  @default(now()) @db.Timestamptz(6)
+  operators      operators? @relation(fields: [operator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model clusters {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  issue_type      String            @db.VarChar(50)
+  size            Int?              @default(0)
+  center_lat      Float?
+  center_lng      Float?
+  radius_km       Float?
+  tower_id        String?           @db.VarChar(50)
+  status          String?           @default("open") @db.VarChar(30)
+  created_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  alerts          alerts[]
+  towers          towers?           @relation(fields: [tower_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recommendations recommendations[]
+  resolutions     resolutions[]
+}
+
+model complaints {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  source        String    @db.VarChar(20)
+  raw_text      String
+  location_hint String?   @db.VarChar(255)
+  lat           Float?
+  lng           Float?
+  sender        String?   @db.VarChar(255)
+  timestamp     DateTime? @default(now()) @db.Timestamptz(6)
+  status        String?   @default("pending") @db.VarChar(30)
+  issue_type    String?   @db.VarChar(50)
+  severity      String?   @db.VarChar(20)
+  confidence    Float?
+  cluster_id    String?   @db.Uuid
+  tower_id      String?   @db.VarChar(50)
+  media_url     String?
+  metadata      Json?
+  towers        towers?   @relation(fields: [tower_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([cluster_id], map: "idx_complaints_cluster_id")
+  @@index([status], map: "idx_complaints_status")
+  @@index([timestamp(sort: Desc)], map: "idx_complaints_timestamp")
+  @@index([tower_id], map: "idx_complaints_tower_id")
+}
+
+model operators {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String          @db.VarChar(255)
+  email         String          @unique @db.VarChar(255)
+  password_hash String
+  role          String?         @default("operator") @db.VarChar(20)
+  created_at    DateTime?       @default(now()) @db.Timestamptz(6)
+  last_login    DateTime?       @db.Timestamptz(6)
+  chat_messages chat_messages[]
+}
+
+model recommendations {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cluster_id       String?       @db.Uuid
+  tower_id         String?       @db.VarChar(50)
+  root_cause       String
+  suggested_action String
+  affected_users   Int?          @default(0)
+  priority         String        @db.VarChar(20)
+  confidence       Float?
+  status           String?       @default("pending") @db.VarChar(20)
+  operator_note    String?
+  created_at       DateTime?     @default(now()) @db.Timestamptz(6)
+  reviewed_at      DateTime?     @db.Timestamptz(6)
+  reviewed_by      String?       @db.VarChar(255)
+  clusters         clusters?     @relation(fields: [cluster_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  towers           towers?       @relation(fields: [tower_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  resolutions      resolutions[]
+
+  @@index([status], map: "idx_recommendations_status")
+}
+
+model resolutions {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recommendation_id String?          @db.Uuid
+  tower_id          String?          @db.VarChar(50)
+  cluster_id        String?          @db.Uuid
+  status            String?          @default("open") @db.VarChar(30)
+  assigned_to       String?          @db.VarChar(255)
+  resolved_at       DateTime?        @db.Timestamptz(6)
+  notes             String?
+  created_at        DateTime?        @default(now()) @db.Timestamptz(6)
+  clusters          clusters?        @relation(fields: [cluster_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recommendations   recommendations? @relation(fields: [recommendation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  towers            towers?          @relation(fields: [tower_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model towers {
+  id                 String            @id @db.VarChar(50)
+  name               String            @db.VarChar(255)
+  lat                Float
+  lng                Float
+  status             String?           @default("operational") @db.VarChar(30)
+  coverage_radius_km Float?            @default(2.0)
+  active_complaints  Int?              @default(0)
+  affected_users     Int?              @default(0)
+  last_checked       DateTime?         @default(now()) @db.Timestamptz(6)
+  metadata           Json?
+  alerts             alerts[]
+  clusters           clusters[]
+  complaints         complaints[]
+  recommendations    recommendations[]
+  resolutions        resolutions[]
+}

@@ -4,8 +4,10 @@
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
-# Install ALL deps (incl. dev: typescript) using the lockfile for reproducibility.
+# Install ALL deps (incl. dev: typescript). Copy the Prisma schema first so the
+# `postinstall: prisma generate` step has it.
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 # Compile, then copy the SQL migration into dist (tsc only emits .ts → .js, so
@@ -21,8 +23,10 @@ FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Only production dependencies → smaller image, no toolchain.
+# Only production dependencies → smaller image. Prisma schema is needed for the
+# postinstall `prisma generate` (the client lands in node_modules/@prisma/client).
 COPY package*.json ./
+COPY prisma ./prisma
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Compiled app + the migration SQL copied above.

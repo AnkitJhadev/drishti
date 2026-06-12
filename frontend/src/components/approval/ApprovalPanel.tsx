@@ -98,7 +98,14 @@ export default function ApprovalPanel({ open, onClose }: Props) {
                   className="w-full mt-3 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
                   style={{ background: '#10b981', color: '#0a0f1e' }}
                 >
-                  {busyId === r.id ? 'Resolving…' : '✓ Mark Resolved — restore tower'}
+                  {busyId === r.id ? (
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      <span className="dr-spinner" style={{ width: 10, height: 10 }} />
+                      Resolving…
+                    </span>
+                  ) : (
+                    '✓ Mark Resolved — restore tower'
+                  )}
                 </button>
               </div>
             ))

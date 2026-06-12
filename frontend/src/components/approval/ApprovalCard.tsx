@@ -38,8 +38,23 @@ export default function ApprovalCard({ recommendation }: Props) {
     }
   }
 
+  const busyLabel =
+    busy === 'approve' ? 'Approving…' : busy === 'reject' ? 'Rejecting…' : busy === 'escalate' ? 'Escalating…' : null
+
   return (
-    <div className="dr-card dr-fade-in p-3 mb-3">
+    <div className="dr-card dr-fade-in p-3 mb-3 relative" aria-busy={busy !== null}>
+      {busy && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center rounded-lg"
+          style={{ background: 'rgba(17, 24, 39, 0.8)' }}
+        >
+          <span className="inline-flex items-center gap-2 text-xs font-semibold" style={{ color: '#f9fafb' }}>
+            <span className="dr-spinner" style={{ width: 14, height: 14, color: '#f59e0b' }} />
+            {busyLabel}
+          </span>
+        </div>
+      )}
+
       <RecommendationCard recommendation={recommendation} />
 
       {/* Optional note */}
@@ -70,7 +85,7 @@ export default function ApprovalCard({ recommendation }: Props) {
           className="flex-1 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
           style={{ background: '#10b981', color: '#0a0f1e' }}
         >
-          {busy === 'approve' ? '…' : '✓ Approve'}
+          ✓ Approve
         </button>
         <button
           onClick={() => act('reject')}
@@ -78,7 +93,7 @@ export default function ApprovalCard({ recommendation }: Props) {
           className="flex-1 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
           style={{ background: '#7f1d1d', color: '#f87171' }}
         >
-          {busy === 'reject' ? '…' : '✕ Reject'}
+          ✕ Reject
         </button>
         <button
           onClick={() => act('escalate')}
@@ -86,7 +101,7 @@ export default function ApprovalCard({ recommendation }: Props) {
           className="px-3 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
           style={{ background: '#1f2937', color: '#fb923c' }}
         >
-          {busy === 'escalate' ? '…' : '⤴ Escalate'}
+          ⤴ Escalate
         </button>
       </div>
     </div>

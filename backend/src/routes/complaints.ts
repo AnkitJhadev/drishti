@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { emitComplaintResolved, emitTowerStatusChanged } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
@@ -11,34 +11,38 @@ const router = Router()
 // has no active complaints left, restores it to operational.
 router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await query<{ id: string; tower_id: string | null }>(
-      `UPDATE complaints SET status = 'resolved'
-       WHERE id = $1 AND status != 'resolved'
-       RETURNING id, tower_id`,
-      [req.params.id]
-    )
-    if (rows.length === 0) {
+    const complaint = await prisma.complaints.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, status: true, tower_id: true },
+    })
+    if (!complaint || complaint.status === 'resolved') {
       res.status(404).json({ error: 'Complaint not found or already resolved' })
       return
     }
 
-    const towerId = rows[0].tower_id
+    await prisma.complaints.update({ where: { id: complaint.id }, data: { status: 'resolved' } })
+
+    const towerId = complaint.tower_id
     if (towerId) {
-      const tw = await query<{ active_complaints: number }>(
-        `UPDATE towers
-         SET active_complaints = GREATEST(active_complaints - 1, 0)
-         WHERE id = $1 RETURNING active_complaints`,
-        [towerId]
-      )
+      const tw = await prisma.towers.update({
+        where: { id: towerId },
+        data: { active_complaints: { decrement: 1 } },
+        select: { active_complaints: true },
+      })
+      let count = tw.active_complaints ?? 0
+      if (count < 0) {
+        await prisma.towers.update({ where: { id: towerId }, data: { active_complaints: 0 } })
+        count = 0
+      }
       // No active complaints left → tower back to operational
-      if (tw[0] && tw[0].active_complaints === 0) {
-        await query(`UPDATE towers SET status = 'operational' WHERE id = $1`, [towerId])
+      if (count === 0) {
+        await prisma.towers.update({ where: { id: towerId }, data: { status: 'operational' } })
         emitTowerStatusChanged(towerId, 'operational')
       }
     }
 
-    emitComplaintResolved(rows[0].id)
-    logger.info(`Complaint ${rows[0].id} resolved`)
+    emitComplaintResolved(complaint.id)
+    logger.info(`Complaint ${complaint.id} resolved`)
     res.json({ ok: true })
   } catch (err) {
     logger.error(`PATCH /complaints/:id/resolve error: ${String(err)}`)
@@ -49,53 +53,26 @@ router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): P
 // GET /complaints — paginated list with filters
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const page    = Math.max(1, parseInt(req.query.page as string) || 1)
-    const limit   = Math.min(100, parseInt(req.query.limit as string) || 20)
-    const offset  = (page - 1) * limit
-    const status  = req.query.status as string | undefined
-    const source  = req.query.source as string | undefined
-    const severity = req.query.severity as string | undefined
+    const page = Math.max(1, parseInt(req.query.page as string) || 1)
+    const limit = Math.min(100, parseInt(req.query.limit as string) || 20)
+    const offset = (page - 1) * limit
 
-    const conditions: string[] = []
-    const params: unknown[] = []
-    let p = 1
+    const where: { status?: string; source?: string; severity?: string } = {}
+    if (req.query.status) where.status = req.query.status as string
+    if (req.query.source) where.source = req.query.source as string
+    if (req.query.severity) where.severity = req.query.severity as string
 
-    if (status)   { conditions.push(`status = $${p++}`);   params.push(status) }
-    if (source)   { conditions.push(`source = $${p++}`);   params.push(source) }
-    if (severity) { conditions.push(`severity = $${p++}`); params.push(severity) }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
-
-    const [rows, countRows] = await Promise.all([
-      query<{ lat: number; lng: number }>(
-        `SELECT id, source, raw_text, location_hint, lat, lng, sender,
-                timestamp, status, issue_type, severity, confidence,
-                cluster_id, tower_id, media_url
-         FROM complaints ${where}
-         ORDER BY timestamp DESC
-         LIMIT $${p} OFFSET $${p + 1}`,
-        [...params, limit, offset]
-      ),
-      query<{ count: string }>(
-        `SELECT COUNT(*) as count FROM complaints ${where}`,
-        params
-      ),
+    const [rows, total] = await Promise.all([
+      prisma.complaints.findMany({ where, orderBy: { timestamp: 'desc' }, skip: offset, take: limit }),
+      prisma.complaints.count({ where }),
     ])
 
     // Map lat/lng → coordinates tuple to match the frontend type
-    const complaints = rows.map((r) => ({
-      ...r,
-      coordinates: [r.lat ?? 0, r.lng ?? 0],
-    }))
+    const complaints = rows.map((r) => ({ ...r, coordinates: [r.lat ?? 0, r.lng ?? 0] }))
 
     res.json({
       complaints,
-      pagination: {
-        page,
-        limit,
-        total: parseInt(countRows[0].count, 10),
-        pages: Math.ceil(parseInt(countRows[0].count, 10) / limit),
-      },
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
     })
   } catch (err) {
     logger.error(`GET /complaints error: ${String(err)}`)
@@ -103,23 +80,21 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   }
 })
 
-// GET /complaints/:id — single complaint detail
+// GET /complaints/:id — single complaint detail (+ correlated tower name/status)
 router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await query(
-      `SELECT c.*, t.name as tower_name, t.status as tower_status
-       FROM complaints c
-       LEFT JOIN towers t ON c.tower_id = t.id
-       WHERE c.id = $1`,
-      [req.params.id]
-    )
+    const c = await prisma.complaints.findUnique({
+      where: { id: req.params.id },
+      include: { towers: { select: { name: true, status: true } } },
+    })
 
-    if (rows.length === 0) {
+    if (!c) {
       res.status(404).json({ error: 'Complaint not found' })
       return
     }
 
-    res.json({ complaint: rows[0] })
+    const { towers, ...rest } = c
+    res.json({ complaint: { ...rest, tower_name: towers?.name ?? null, tower_status: towers?.status ?? null } })
   } catch (err) {
     logger.error(`GET /complaints/:id error: ${String(err)}`)
     res.status(500).json({ error: 'Failed to fetch complaint' })

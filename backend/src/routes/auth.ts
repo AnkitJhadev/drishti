@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { requireAuth } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
 import { loginSchema, type LoginBody } from '../schemas/auth.schema'
@@ -9,30 +9,21 @@ import { logger } from '../utils/logger'
 
 const router = Router()
 
-interface OperatorRow {
-  id: string
-  name: string
-  email: string
-  password_hash: string
-  role: 'operator' | 'admin'
-}
-
 // POST /auth/login
 router.post('/login', validateBody(loginSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as LoginBody
 
-    const rows = await query<OperatorRow>(
-      'SELECT id, name, email, password_hash, role FROM operators WHERE email = $1',
-      [email.toLowerCase().trim()]
-    )
+    const operator = await prisma.operators.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { id: true, name: true, email: true, password_hash: true, role: true },
+    })
 
-    if (rows.length === 0) {
+    if (!operator) {
       res.status(401).json({ error: 'Invalid email or password' })
       return
     }
 
-    const operator = rows[0]
     const valid = await bcrypt.compare(password, operator.password_hash)
 
     if (!valid) {
@@ -41,7 +32,7 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
     }
 
     // Update last_login
-    await query('UPDATE operators SET last_login = NOW() WHERE id = $1', [operator.id])
+    await prisma.operators.update({ where: { id: operator.id }, data: { last_login: new Date() } })
 
     const token = jwt.sign(
       { id: operator.id, email: operator.email, role: operator.role },
@@ -69,17 +60,17 @@ router.post('/login', validateBody(loginSchema), async (req: Request, res: Respo
 // GET /auth/me
 router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await query<Omit<OperatorRow, 'password_hash'>>(
-      'SELECT id, name, email, role FROM operators WHERE id = $1',
-      [req.operator!.id]
-    )
+    const operator = await prisma.operators.findUnique({
+      where: { id: req.operator!.id },
+      select: { id: true, name: true, email: true, role: true },
+    })
 
-    if (rows.length === 0) {
+    if (!operator) {
       res.status(404).json({ error: 'Operator not found' })
       return
     }
 
-    res.json({ operator: rows[0] })
+    res.json({ operator })
   } catch (err) {
     logger.error(`/auth/me error: ${String(err)}`)
     res.status(500).json({ error: 'Internal server error' })

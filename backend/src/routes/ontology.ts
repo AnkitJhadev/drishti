@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -27,15 +27,15 @@ interface GraphLink {
 router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
     const [towers, clusters, recs] = await Promise.all([
-      query<{ id: string; name: string; status: string; active_complaints: number }>(
-        `SELECT id, name, status, active_complaints FROM towers`
-      ),
-      query<{ id: string; issue_type: string; tower_id: string | null; size: number }>(
-        `SELECT id, issue_type, tower_id, size FROM clusters`
-      ),
-      query<{ id: string; cluster_id: string | null; tower_id: string | null; priority: string }>(
-        `SELECT id, cluster_id, tower_id, priority FROM recommendations`
-      ),
+      prisma.towers.findMany({
+        select: { id: true, name: true, status: true, active_complaints: true },
+      }),
+      prisma.clusters.findMany({
+        select: { id: true, issue_type: true, tower_id: true, size: true },
+      }),
+      prisma.recommendations.findMany({
+        select: { id: true, cluster_id: true, tower_id: true, priority: true },
+      }),
     ])
 
     const nodes: GraphNode[] = []
@@ -49,10 +49,10 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
     recs.forEach((r) => r.tower_id && refTowers.add(r.tower_id))
 
     towers.filter((t) => refTowers.has(t.id) || t.status !== 'operational').forEach((t) =>
-      add({ id: `tower:${t.id}`, type: 'tower', label: t.id, status: t.status, weight: t.active_complaints })
+      add({ id: `tower:${t.id}`, type: 'tower', label: t.id, status: t.status ?? undefined, weight: t.active_complaints ?? 0 })
     )
     clusters.forEach((c) => {
-      add({ id: `cluster:${c.id}`, type: 'cluster', label: c.issue_type, weight: c.size })
+      add({ id: `cluster:${c.id}`, type: 'cluster', label: c.issue_type, weight: c.size ?? 0 })
       if (c.tower_id && seen.has(`tower:${c.tower_id}`)) links.push({ source: `cluster:${c.id}`, target: `tower:${c.tower_id}` })
     })
     recs.forEach((r) => {

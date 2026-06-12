@@ -2,16 +2,22 @@ import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
 import { validateBody } from '../middleware/validate'
 import { createTowerSchema, type CreateTowerBody } from '../schemas/tower.schema'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { emitTowerAdded } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
 
+// Worst-status-first ordering (Prisma can't express a CASE in orderBy).
+const STATUS_RANK: Record<string, number> = { critical: 1, offline: 2, degraded: 3, operational: 4 }
+
 // Generate the next sequential tower id: T-101, T-102, …
 async function nextTowerId(): Promise<string> {
-  const rows = await query<{ id: string }>(`SELECT id FROM towers WHERE id ~ '^T-[0-9]+$'`)
-  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.id.slice(2), 10) || 0), 100)
+  const rows = await prisma.towers.findMany({ select: { id: true } })
+  const max = rows.reduce(
+    (m, r) => (/^T-\d+$/.test(r.id) ? Math.max(m, parseInt(r.id.slice(2), 10) || 0) : m),
+    100
+  )
   return `T-${max + 1}`
 }
 
@@ -19,30 +25,22 @@ async function nextTowerId(): Promise<string> {
 router.post('/', requireAuth, validateBody(createTowerSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, lat, lng, coverage_radius_km } = req.body as CreateTowerBody
-    const radius = coverage_radius_km ?? 2.0
-
     const id = await nextTowerId()
 
-    const rows = await query<{
-      id: string
-      name: string
-      lat: number
-      lng: number
-      status: string
-      coverage_radius_km: number
-      active_complaints: number
-      affected_users: number
-      last_checked: string
-    }>(
-      `INSERT INTO towers
-         (id, name, lat, lng, status, coverage_radius_km, active_complaints, affected_users)
-       VALUES ($1, $2, $3, $4, 'operational', $5, 0, 0)
-       RETURNING id, name, lat, lng, status, coverage_radius_km,
-                 active_complaints, affected_users, last_checked`,
-      [id, name.trim(), lat, lng, radius]
-    )
+    const created = await prisma.towers.create({
+      data: {
+        id,
+        name: name.trim(),
+        lat,
+        lng,
+        status: 'operational',
+        coverage_radius_km: coverage_radius_km ?? 2.0,
+        active_complaints: 0,
+        affected_users: 0,
+      },
+    })
 
-    const tower = { ...rows[0], coordinates: [rows[0].lat, rows[0].lng] as [number, number] }
+    const tower = { ...created, coordinates: [created.lat, created.lng] as [number, number] }
     emitTowerAdded(tower)
     logger.info(`Tower added: ${id} "${name}" @ ${lat},${lng}`)
 
@@ -56,20 +54,12 @@ router.post('/', requireAuth, validateBody(createTowerSchema), async (req: Reque
 // GET /towers — all towers with status
 router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const rows = await query<{ lat: number; lng: number }>(
-      `SELECT id, name, lat, lng, status, coverage_radius_km,
-              active_complaints, affected_users, last_checked
-       FROM towers
-       ORDER BY
-         CASE status
-           WHEN 'critical'    THEN 1
-           WHEN 'offline'     THEN 2
-           WHEN 'degraded'    THEN 3
-           WHEN 'operational' THEN 4
-         END,
-         active_complaints DESC`
+    const rows = await prisma.towers.findMany()
+    rows.sort(
+      (a, b) =>
+        (STATUS_RANK[a.status ?? 'operational'] ?? 5) - (STATUS_RANK[b.status ?? 'operational'] ?? 5) ||
+        (b.active_complaints ?? 0) - (a.active_complaints ?? 0)
     )
-    // Map lat/lng → coordinates tuple to match the frontend Tower type
     const towers = rows.map((r) => ({ ...r, coordinates: [r.lat, r.lng] }))
     res.json({ towers })
   } catch (err) {
@@ -81,43 +71,29 @@ router.get('/', requireAuth, async (_req: Request, res: Response): Promise<void>
 // GET /towers/:id — tower detail + recent complaints + recommendations
 router.get('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const towerRows = await query(
-      `SELECT id, name, lat, lng, status, coverage_radius_km,
-              active_complaints, affected_users, last_checked, metadata
-       FROM towers WHERE id = $1`,
-      [req.params.id]
-    )
-
-    if (towerRows.length === 0) {
+    const tower = await prisma.towers.findUnique({ where: { id: req.params.id } })
+    if (!tower) {
       res.status(404).json({ error: 'Tower not found' })
       return
     }
 
     const [complaints, recommendations, clusters] = await Promise.all([
-      query(
-        `SELECT id, source, issue_type, severity, status, timestamp, location_hint
-         FROM complaints WHERE tower_id = $1
-         ORDER BY timestamp DESC LIMIT 20`,
-        [req.params.id]
-      ),
-      query(
-        `SELECT id, root_cause, suggested_action, priority, confidence, status, created_at
-         FROM recommendations WHERE tower_id = $1
-         ORDER BY created_at DESC LIMIT 5`,
-        [req.params.id]
-      ),
-      query(
-        `SELECT id FROM clusters WHERE tower_id = $1`,
-        [req.params.id]
-      ),
+      prisma.complaints.findMany({
+        where: { tower_id: req.params.id },
+        select: { id: true, source: true, issue_type: true, severity: true, status: true, timestamp: true, location_hint: true },
+        orderBy: { timestamp: 'desc' },
+        take: 20,
+      }),
+      prisma.recommendations.findMany({
+        where: { tower_id: req.params.id },
+        select: { id: true, root_cause: true, suggested_action: true, priority: true, confidence: true, status: true, created_at: true },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+      prisma.clusters.findMany({ where: { tower_id: req.params.id }, select: { id: true } }),
     ])
 
-    res.json({
-      tower: towerRows[0],
-      complaints,
-      recommendations,
-      cluster_ids: (clusters as { id: string }[]).map((c) => c.id),
-    })
+    res.json({ tower, complaints, recommendations, cluster_ids: clusters.map((c) => c.id) })
   } catch (err) {
     logger.error(`GET /towers/:id error: ${String(err)}`)
     res.status(500).json({ error: 'Failed to fetch tower' })

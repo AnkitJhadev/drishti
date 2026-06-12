@@ -18,19 +18,21 @@ This is the **production runbook** for the architecture you chose:
                               Neon (Postgres) · Upstash (Redis)
 ```
 
-**Split:** backend + Qdrant + Caddy run on EC2. Postgres (Neon) and Redis (Upstash) are
-managed free tiers — you get backups and don't own recovery. Frontend is static on Vercel.
-(Qdrant Cloud's free tier was tried and found unreliable — Qdrant stays local.)
+**Split:** only backend + Caddy run on EC2 (fits the 1 GB free tier). Postgres (Neon),
+Redis (Upstash) and Qdrant (Qdrant Cloud) are managed free tiers — you get backups and
+don't own recovery. Frontend is static on Vercel.
+(Qdrant Cloud was verified working end-to-end — the earlier failure was a malformed
+cluster URL; it must end with `:6333` and carry the API key.)
 
 ---
 
 ## 0. Before you start — instance sizing ⚠️
 
-The EC2 box runs Caddy + the backend + Qdrant. On the free tier (1 GB RAM) this fits
-**only with the 2 GB swap file created in §4** — the embedding model (~300 MB when
-loaded) plus Qdrant (~100–150 MB) must be able to spill to swap instead of triggering
+The EC2 box runs only Caddy + the backend; Qdrant, Postgres and Redis are all managed.
+On the free tier (1 GB RAM) still create **the 2 GB swap file in §4** — the embedding
+model (~300 MB when loaded) plus a file upload must spill to swap instead of triggering
 the OOM killer. Expect the occasional slow request when swap is in play; fine for
-demo/portfolio traffic, and the demo data set keeps Qdrant small.
+demo/portfolio traffic.
 
 | Instance | RAM | Verdict |
 |---|---|---|
@@ -81,8 +83,16 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    > one compose stanza: add a `redis:` container to docker-compose.prod.yml and set
    > `REDIS_URL=redis://redis:6379` — free, local, no quota (costs ~10 MB RAM on the box).
 
-> Qdrant needs no provisioning — it runs as a container on the EC2 box (the compose file
-> wires `QDRANT_URL` to it) and the backend creates the `drishti_docs` collection on boot.
+### Qdrant Cloud (vectors)
+1. Sign up at [cloud.qdrant.io](https://cloud.qdrant.io) → create a **free-tier cluster**
+   (1 GB, free forever) — pick the region nearest your EC2 if offered.
+2. Copy the **cluster URL** and create an **API key**. Two gotchas that make it look
+   "broken": the URL must **end with `:6333`** and have **no trailing slash**.
+   ```
+   QDRANT_URL=https://<cluster-id>.<region>.aws.cloud.qdrant.io:6333
+   QDRANT_API_KEY=<key>
+   ```
+   The backend creates the `drishti_docs` collection (dim 384) on first boot.
 
 ---
 
@@ -97,8 +107,8 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    | 80 | 0.0.0.0/0 | Caddy → Let's Encrypt HTTP-01 challenge + redirect |
    | 443 | 0.0.0.0/0 | HTTPS + WSS API traffic |
 
-   **Do NOT open 4000 (backend) or 6333 (Qdrant)** — the compose file never publishes
-   them; they're reachable only inside the Docker network. Keep it that way.
+   **Do NOT open 4000 (backend)** — the compose file never publishes it; only Caddy
+   reaches it over the internal Docker network. Keep it that way.
 3. Allocate an **Elastic IP** and associate it with the instance (so the IP survives stop/start).
 
 ---
@@ -150,6 +160,8 @@ nano .env.prod          # fill in EVERY value — see the checklist below
 |---|---|
 | `DATABASE_URL` | Neon direct connection string from §1 (with `?sslmode=require`) |
 | `REDIS_URL` | Upstash `rediss://` string from §1 |
+| `QDRANT_URL` | Qdrant Cloud cluster URL from §1 — **must end `:6333`, no trailing slash** |
+| `QDRANT_API_KEY` | Qdrant Cloud API key from §1 |
 | `EMBED_DIM` | `384` |
 | `EMBED_MODEL` | `Xenova/all-MiniLM-L6-v2` |
 | `GROQ_API_KEY` | from console.groq.com (free). Add `GROQ_API_KEY_2/3` to pool daily quota. |
@@ -225,8 +237,8 @@ Open the Vercel URL, log in with **`admin@drishti.com` / `drishti@123`** (seeded
 cd drishti && docker compose -f docker-compose.prod.yml up -d
 ```
 
-Qdrant vectors persist in `qdrant_data`; Caddy certs in `caddy_data`; the embedding model
-in `hf_cache`. Postgres and Redis are external, so nothing is lost on instance stop.
+Caddy certs persist in `caddy_data`; the embedding model in `hf_cache`. Postgres, Redis
+and Qdrant are all external, so nothing is lost on instance stop.
 
 ---
 

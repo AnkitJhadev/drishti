@@ -1,8 +1,9 @@
 # Production stack for a single host — sized for a FREE-TIER EC2 (1 GB RAM
-# + the 2 GB swap file from DEPLOY.md §4, which is mandatory at this size).
+# + the 2 GB swap file from DEPLOY.md §4).
 #
-# What runs here:  backend (your image) + qdrant (local) + caddy (HTTPS).
-# What is EXTERNAL: Postgres (Neon) and Redis (Upstash) — provided via .env.prod URLs.
+# What runs here:  backend (your image) + caddy (HTTPS). That's all.
+# What is EXTERNAL: Postgres (Neon), Redis (Upstash) and Qdrant (Qdrant Cloud
+# free tier) — provided via .env.prod URLs.
 # The frontend is deployed separately on Vercel.
 #
 # Usage on the host:
@@ -29,14 +30,10 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    env_file: .env.prod
+    env_file: .env.prod   # includes QDRANT_URL / QDRANT_API_KEY (Qdrant Cloud)
     environment:
       NODE_ENV: production
       PORT: 4000
-      # Qdrant is a sibling container on this network — reachable by service name.
-      QDRANT_URL: http://qdrant:6333
-    depends_on:
-      - qdrant
     # No published ports — only Caddy talks to it (over the internal network).
     expose:
       - "4000"
@@ -44,15 +41,7 @@ services:
       # Persist the ~30MB on-device embedding model across image rebuilds.
       - hf_cache:/app/.cache
 
-  # ── Vector DB: runs locally, data persisted to a named volume ────────────
-  qdrant:
-    image: qdrant/qdrant:latest
-    restart: unless-stopped
-    volumes:
-      - qdrant_data:/qdrant/storage
-
 volumes:
-  qdrant_data:
   hf_cache:
   caddy_data:
   caddy_config:

@@ -1,7 +1,7 @@
 # Production stack for a single host (e.g. an AWS EC2 instance).
 #
 # What runs here:  backend (your image) + qdrant (local, same network) + caddy (HTTPS).
-# What is EXTERNAL: Postgres (Supabase) and Redis (Upstash) — provided via .env.prod URLs.
+# What is EXTERNAL: Postgres (Neon) and Redis (Upstash) — provided via .env.prod URLs.
 # The frontend is deployed separately on Vercel.
 #
 # Usage on the host:

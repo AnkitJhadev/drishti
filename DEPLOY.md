@@ -15,10 +15,10 @@ This is the **production runbook** for the architecture you chose:
                                 │  └──────┘  └────┬────┘  └────┘ │
                                 └────────────────┼──────────────┘
                                      external ▼ (managed, free tier)
-                              Supabase (Postgres) · Upstash (Redis)
+                              Neon (Postgres) · Upstash (Redis)
 ```
 
-**Split:** Qdrant + backend + Caddy run on EC2. Postgres (Supabase) and Redis (Upstash)
+**Split:** Qdrant + backend + Caddy run on EC2. Postgres (Neon) and Redis (Upstash)
 stay managed — you get free backups and don't own recovery. Frontend is static on Vercel.
 
 ---
@@ -41,28 +41,28 @@ address; see §7).
 You also need:
 - A **domain** (or subdomain) you control, e.g. `api.yourdomain.com` — Caddy needs it to
   issue a Let's Encrypt cert. Caddy **cannot** get a cert for a bare IP.
-- Free accounts on **Supabase** (Postgres) and **Upstash** (Redis).
+- Free accounts on **Neon** (Postgres) and **Upstash** (Redis).
 - A **Vercel** account.
 
 ---
 
 ## 1. Provision the managed data stores (do this first)
 
-### Supabase (Postgres)
-1. Create a project → wait for it to spin up.
-2. **Connection string:** Project → *Connect* → **use the "Connection pooling" / Transaction
-   or Session string**, NOT the raw "Direct connection" one.
-   - The direct (`db.<ref>.supabase.co:5432`) host is **IPv6-only** on new projects; EC2's
-     default VPC may not route IPv6, so the connection hangs. The **pooler** host
-     (`aws-0-<region>.pooler.supabase.com`) is IPv4 — use it.
-3. Append `?sslmode=require` so **Prisma** uses TLS (the raw `pg` pool already forces SSL for
-   non-local hosts, but Prisma reads the URL verbatim). Final form:
+### Neon (Postgres)
+1. Create a project — pick the region closest to the EC2 region (no Mumbai on Neon;
+   Singapore `ap-southeast-1` pairs well with EC2 `ap-south-1`).
+2. **Connection string:** copy the **Direct** one (host *without* `-pooler`), not the
+   Pooled one. The pooled endpoint is PgBouncer in transaction mode, which breaks
+   Prisma's prepared statements unless you add `?pgbouncer=true&connection_limit=1`.
+   A single backend instance with its own small pool doesn't need it.
+3. Keep the `?sslmode=require` suffix Neon includes — **Prisma** reads the URL verbatim
+   (the raw `pg` pool already forces SSL for non-local hosts on its own). Final form:
    ```
-   DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+   DATABASE_URL=postgresql://neondb_owner:<password>@ep-<id>.<region>.aws.neon.tech/neondb?sslmode=require
    ```
-   > If you use the **transaction** pooler (port `6543`) instead of session (`5432`), also add
-   > `&pgbouncer=true&connection_limit=1` — pgBouncer transaction mode breaks Prisma's prepared
-   > statements otherwise. Session mode (5432) needs neither; prefer it here.
+   > Neon's free tier **suspends the compute after ~5 min idle**; the first query after a
+   > suspend takes ~1s extra while it wakes. Harmless for this app — just don't mistake
+   > the one-off slow request for a bug.
 
 You do **not** need to run the schema by hand — the backend runs `001_init.sql` on boot
 (`runMigrations()`), seeds 20 towers, and seeds the admin operator automatically.
@@ -73,6 +73,10 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    ```
    REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379
    ```
+   > ⚠️ **Quota note:** BullMQ polls Redis even when idle, and Upstash bills per command —
+   > idle polling can chew through the free tier. If you hit quota errors, the fallback is
+   > one compose stanza: add a `redis:` container next to `qdrant:` and set
+   > `REDIS_URL=redis://redis:6379` — free, local, no quota.
 
 ---
 
@@ -129,7 +133,7 @@ nano .env.prod          # fill in EVERY value — see the checklist below
 
 | Var | Value |
 |---|---|
-| `DATABASE_URL` | Supabase pooler string from §1 (with `?sslmode=require`) |
+| `DATABASE_URL` | Neon direct connection string from §1 (with `?sslmode=require`) |
 | `REDIS_URL` | Upstash `rediss://` string from §1 |
 | `EMBED_DIM` | `384` |
 | `EMBED_MODEL` | `Xenova/all-MiniLM-L6-v2` |

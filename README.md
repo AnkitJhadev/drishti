@@ -304,7 +304,7 @@ cd frontend && npm run typecheck && npm run build
 ## Deployment
 
 **Production target:** Vercel (frontend) + AWS EC2 (backend + Qdrant + Caddy/HTTPS) with
-Supabase (Postgres) and Upstash (Redis) as managed stores. Full step-by-step runbook —
+Neon (Postgres) and Upstash (Redis) as managed stores. Full step-by-step runbook —
 instance sizing, security groups, DNS/TLS, secrets, CORS — in **[`DEPLOY.md`](DEPLOY.md)**.
 The host stack is defined in [`docker-compose.prod.yml`](docker-compose.prod.yml) + [`Caddyfile`](Caddyfile); copy [`.env.prod.example`](.env.prod.example) → `.env.prod` and fill it in.
 

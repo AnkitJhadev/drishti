@@ -1,6 +1,7 @@
-# Production stack for a single host (e.g. an AWS EC2 instance).
+# Production stack for a single host — sized for a FREE-TIER EC2 (1 GB RAM
+# + the 2 GB swap file from DEPLOY.md §4, which is mandatory at this size).
 #
-# What runs here:  backend (your image) + qdrant (local, same network) + caddy (HTTPS).
+# What runs here:  backend (your image) + qdrant (local) + caddy (HTTPS).
 # What is EXTERNAL: Postgres (Neon) and Redis (Upstash) — provided via .env.prod URLs.
 # The frontend is deployed separately on Vercel.
 #
@@ -39,6 +40,9 @@ services:
     # No published ports — only Caddy talks to it (over the internal network).
     expose:
       - "4000"
+    volumes:
+      # Persist the ~30MB on-device embedding model across image rebuilds.
+      - hf_cache:/app/.cache
 
   # ── Vector DB: runs locally, data persisted to a named volume ────────────
   qdrant:
@@ -49,5 +53,6 @@ services:
 
 volumes:
   qdrant_data:
+  hf_cache:
   caddy_data:
   caddy_config:

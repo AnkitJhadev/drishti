@@ -18,25 +18,28 @@ This is the **production runbook** for the architecture you chose:
                               Neon (Postgres) · Upstash (Redis)
 ```
 
-**Split:** Qdrant + backend + Caddy run on EC2. Postgres (Neon) and Redis (Upstash)
-stay managed — you get free backups and don't own recovery. Frontend is static on Vercel.
+**Split:** backend + Qdrant + Caddy run on EC2. Postgres (Neon) and Redis (Upstash) are
+managed free tiers — you get backups and don't own recovery. Frontend is static on Vercel.
+(Qdrant Cloud's free tier was tried and found unreliable — Qdrant stays local.)
 
 ---
 
-## 0. Before you start — pick the right instance ⚠️
+## 0. Before you start — instance sizing ⚠️
 
-The backend loads an on-device embedding model (`@xenova/transformers`, ~30 MB on disk
-but materialised in RAM) **and** runs a BullMQ worker, alongside Qdrant + Caddy on the
-same box.
+The EC2 box runs Caddy + the backend + Qdrant. On the free tier (1 GB RAM) this fits
+**only with the 2 GB swap file created in §4** — the embedding model (~300 MB when
+loaded) plus Qdrant (~100–150 MB) must be able to spill to swap instead of triggering
+the OOM killer. Expect the occasional slow request when swap is in play; fine for
+demo/portfolio traffic, and the demo data set keeps Qdrant small.
 
 | Instance | RAM | Verdict |
 |---|---|---|
-| `t3.micro` / `t2.micro` (free tier) | 1 GB | ❌ Will OOM-kill Node under load. Don't. |
-| **`t3.small`** | 2 GB | ✅ Minimum. Fine for demo/portfolio traffic. |
-| `t3.medium` | 4 GB | ✅ Comfortable headroom. |
+| **`t3.micro` / `t2.micro`** (free tier) | 1 GB | ✅ Works **with the 2 GB swap file (§4)** — not optional. |
+| `t3.small` | 2 GB | ✅ Comfortable, ~$15/mo — use it if your account has the credits-based free plan. |
 
-Cost is ~$15–30/mo. **Stop the instance when idle** to save money (Elastic IP keeps the
-address; see §7).
+> **Which free tier do you have?** Accounts created after mid-2025 get *credits*
+> (~$100–200) instead of 12 months of micro instances. Credits run a `t3.small` for
+> months — check Billing → Free tier in the console. Classic plan → `t3.micro`.
 
 You also need:
 - A **domain** (or subdomain) you control, e.g. `api.yourdomain.com` — Caddy needs it to
@@ -75,14 +78,18 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    ```
    > ⚠️ **Quota note:** BullMQ polls Redis even when idle, and Upstash bills per command —
    > idle polling can chew through the free tier. If you hit quota errors, the fallback is
-   > one compose stanza: add a `redis:` container next to `qdrant:` and set
-   > `REDIS_URL=redis://redis:6379` — free, local, no quota.
+   > one compose stanza: add a `redis:` container to docker-compose.prod.yml and set
+   > `REDIS_URL=redis://redis:6379` — free, local, no quota (costs ~10 MB RAM on the box).
+
+> Qdrant needs no provisioning — it runs as a container on the EC2 box (the compose file
+> wires `QDRANT_URL` to it) and the backend creates the `drishti_docs` collection on boot.
 
 ---
 
 ## 2. Launch the EC2 instance
 
-1. **AMI:** Ubuntu 24.04 LTS. **Type:** `t3.small` (see §0). **Disk:** 20 GB gp3.
+1. **AMI:** Ubuntu 24.04 LTS. **Type:** `t3.micro` free tier (or `t3.small` on credits — §0).
+   **Disk:** 20 GB gp3 (free tier includes 30 GB).
 2. **Security group — inbound rules (only these):**
    | Port | Source | Why |
    |---|---|---|
@@ -90,8 +97,8 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    | 80 | 0.0.0.0/0 | Caddy → Let's Encrypt HTTP-01 challenge + redirect |
    | 443 | 0.0.0.0/0 | HTTPS + WSS API traffic |
 
-   **Do NOT open 6333 (Qdrant) or 4000 (backend).** The compose file never publishes them —
-   they're reachable only inside the Docker network. Keep it that way.
+   **Do NOT open 4000 (backend) or 6333 (Qdrant)** — the compose file never publishes
+   them; they're reachable only inside the Docker network. Keep it that way.
 3. Allocate an **Elastic IP** and associate it with the instance (so the IP survives stop/start).
 
 ---
@@ -104,12 +111,20 @@ will fail until DNS is live.
 
 ---
 
-## 4. Install Docker on the host
+## 4. Prepare the host — swap first, then Docker
 
 ```bash
 ssh ubuntu@<elastic-ip>
 
-# Docker Engine + compose plugin (official convenience script)
+# ── 2 GB swap file (REQUIRED on a 1 GB instance — see §0) ──────────────
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # survive reboots
+free -h    # should show Swap: 2.0Gi
+
+# ── Docker Engine + compose plugin (official convenience script) ───────
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
 newgrp docker            # or log out/in so the group applies
@@ -142,9 +157,6 @@ nano .env.prod          # fill in EVERY value — see the checklist below
 | `GEMINI_API_KEY` | optional fallback; leave blank to skip |
 | `JWT_SECRET` | **generate a strong one:** `openssl rand -base64 48` — do NOT reuse the dev value |
 | `FRONTEND_URL` | your Vercel URL, e.g. `https://drishti.vercel.app` (set after §8; can redeploy) |
-
-> `QDRANT_URL` is **not** in `.env.prod` — it's hard-set to `http://qdrant:6333` in the compose
-> file (the sibling container).
 
 Then set your domain in the Caddyfile:
 ```bash
@@ -213,8 +225,8 @@ Open the Vercel URL, log in with **`admin@drishti.com` / `drishti@123`** (seeded
 cd drishti && docker compose -f docker-compose.prod.yml up -d
 ```
 
-Qdrant vectors persist in the `qdrant_data` volume; Caddy certs in `caddy_data`. Postgres/Redis
-are external, so nothing is lost on instance stop.
+Qdrant vectors persist in `qdrant_data`; Caddy certs in `caddy_data`; the embedding model
+in `hf_cache`. Postgres and Redis are external, so nothing is lost on instance stop.
 
 ---
 

@@ -1,0 +1,7 @@
+# Replace api.example.com with YOUR backend domain (an A-record → this host's IP).
+# Caddy automatically provisions + renews a Let's Encrypt TLS certificate for it,
+# and proxies HTTPS (incl. WebSocket upgrades) to the backend container.
+
+api.example.com {
+    reverse_proxy backend:4000
+}

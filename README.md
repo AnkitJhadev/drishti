@@ -303,4 +303,10 @@ cd frontend && npm run typecheck && npm run build
 
 ## Deployment
 
-Free-tier targets ([`render.yaml`](render.yaml)): Vercel (frontend) · Render (API) · Supabase (Postgres) · Upstash (Redis) · Qdrant Cloud (vectors). Swap the local `.env` values for the production ones and set `NODE_ENV=production`.
+**Production target:** Vercel (frontend) + AWS EC2 (backend + Qdrant + Caddy/HTTPS) with
+Supabase (Postgres) and Upstash (Redis) as managed stores. Full step-by-step runbook —
+instance sizing, security groups, DNS/TLS, secrets, CORS — in **[`DEPLOY.md`](DEPLOY.md)**.
+The host stack is defined in [`docker-compose.prod.yml`](docker-compose.prod.yml) + [`Caddyfile`](Caddyfile); copy [`.env.prod.example`](.env.prod.example) → `.env.prod` and fill it in.
+
+> [`render.yaml`](render.yaml) is an older Render-based alternative and is currently **stale**
+> (see the note at the end of `DEPLOY.md`). The EC2 path above is the supported one.

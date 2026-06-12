@@ -1,0 +1,53 @@
+# Production stack for a single host (e.g. an AWS EC2 instance).
+#
+# What runs here:  backend (your image) + qdrant (local, same network) + caddy (HTTPS).
+# What is EXTERNAL: Postgres (Supabase) and Redis (Upstash) — provided via .env.prod URLs.
+# The frontend is deployed separately on Vercel.
+#
+# Usage on the host:
+#   1. cp .env.prod.example .env.prod   &&   edit .env.prod with your real values
+#   2. edit Caddyfile with your domain
+#   3. docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  # ── Reverse proxy: terminates TLS (auto Let's Encrypt) and forwards to backend ──
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+  # ── The Drishti API (built from backend/Dockerfile) ──────────────────────
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Qdrant is a sibling container on this network — reachable by service name.
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      - qdrant
+    # No published ports — only Caddy talks to it (over the internal network).
+    expose:
+      - "4000"
+
+  # ── Vector DB: runs locally, data persisted to a named volume ────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:
+  caddy_data:
+  caddy_config:

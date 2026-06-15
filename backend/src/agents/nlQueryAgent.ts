@@ -38,14 +38,26 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'get_tower_status',
     description:
-      'Look up towers. Pass tower_id to fetch ONE specific tower of any status (e.g. to check if a tower exists). ' +
-      'Pass status to filter (critical/degraded/offline). Pass neither to list ALL towers. Returns at most one row per call when tower_id is given.',
+      'Look up SPECIFIC towers or filter by a status. Pass tower_id to fetch ONE tower, or status to list towers of that status. ' +
+      'Do NOT use this to answer "how many towers" / totals — use get_tower_summary for counts.',
     input_schema: {
       type: 'object' as const,
       properties: {
         tower_id: { type: 'string', description: 'A specific tower id, e.g. "T-121"' },
         status: { type: 'string', enum: ['operational', 'degraded', 'critical', 'offline'] },
       },
+      required: [],
+    },
+  },
+  {
+    name: 'get_tower_summary',
+    description:
+      'Get the TOTAL number of towers and the exact breakdown by status (operational/degraded/critical/offline). ' +
+      'Use this for any count/overview question like "how many towers are there?" or "network health". ' +
+      'The returned total is the authoritative tower count — never infer it from a filtered list.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
       required: [],
     },
   },
@@ -143,6 +155,21 @@ function makeExecutor(ctx: ToolContext) {
       return { towers: rows }
     }
 
+    if (name === 'get_tower_summary') {
+      const rows = await query<{ status: string; count: string }>(
+        `SELECT status, COUNT(*) as count FROM towers GROUP BY status`
+      )
+      const by_status: Record<string, number> = { operational: 0, degraded: 0, critical: 0, offline: 0 }
+      let total = 0
+      rows.forEach((r) => {
+        const n = parseInt(r.count, 10)
+        by_status[r.status] = n
+        total += n
+      })
+      ctx.chart = by_status // visualize the status breakdown
+      return { total, by_status }
+    }
+
     if (name === 'get_recommendations_summary') {
       const rows = await query<{ status: string; count: string }>(
         `SELECT status, COUNT(*) as count FROM recommendations GROUP BY status`
@@ -206,7 +233,8 @@ You help engineers triage network incidents, investigate complaints, and monitor
 
 ## Tools — when to use each
 - search_rag_store: find complaints that match a concept (e.g. "no signal in Andheri"), useful for root-cause investigation.
-- get_tower_status: look up one or more towers by ID or status filter. Always call this when the user asks about tower health.
+- get_tower_summary: the TOTAL tower count + status breakdown — ALWAYS use this for "how many towers", totals, or network-health overviews. Do not infer totals from a filtered list.
+- get_tower_status: look up a SPECIFIC tower by ID, or list towers of one status. Use for "show me critical towers" or checking a named tower — NOT for counting all towers.
 - get_complaints_by_filter: get counts broken down by issue_type, severity, or status — use for trend questions and summaries.
 - get_cluster_summary: get open incident clusters with their linked towers — use for "what's the biggest incident right now?".
 - get_recommendations_summary: counts of recommendations/approvals by status (pending = awaiting approval) — use for "how many are waiting for approval?" and approval-queue questions.

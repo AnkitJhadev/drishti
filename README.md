@@ -8,15 +8,16 @@
 
 ## 1. Start the project locally
 
-**Prerequisites:** Node.js 18+, Docker, and a free [Groq API key](https://console.groq.com).
+**Prerequisites:** Node.js 18+, Docker, and a free [Groq API key](https://console.groq.com)
+(the only key required to run locally).
 
 ```bash
 # 1. Clone + configure
 git clone https://github.com/AnkitJhadev/drishti.git
 cd drishti
-cp .env.example .env          # then set GROQ_API_KEY and JWT_SECRET
+cp .env.example .env          # then set GROQ_API_KEY and JWT_SECRET (see below)
 
-# 2. Start infrastructure (Postgres + Qdrant + Redis)
+# 2. Start infrastructure — Postgres + Qdrant + Redis, all local (no cloud accounts needed)
 docker compose up -d
 
 # 3. Backend  (terminal 1)
@@ -26,12 +27,28 @@ cd backend && npm install && npm run dev      # → http://localhost:4000
 cd frontend && npm install && npm run dev     # → http://localhost:3000
 ```
 
+The backend self-bootstraps on first run: it applies the DB schema, creates the
+Qdrant collection, and seeds 20 towers + the demo operator. No manual migration step.
+
 Open **http://localhost:3000** and log in with the pre-filled demo account:
 
 > **Email:** `admin@drishti.com`  **Password:** `drishti@123`
 
 **Try it:** click **＋ Ingest Complaints** and drop in a file from [`sample-data/`](sample-data/)
 (e.g. `complaints.csv`). Watch complaints classify, cluster on the map, and a tower turn critical — live.
+
+### Minimum config in `.env`
+| Variable | Required? | Notes |
+|---|---|---|
+| `GROQ_API_KEY` | **Yes** | Free from [console.groq.com](https://console.groq.com). Add `GROQ_API_KEY_2…_10` to pool quota. |
+| `JWT_SECRET` | **Yes** | Any long random string (`openssl rand -base64 48`). |
+| `GEMINI_API_KEY` | Optional | Fallback when Groq's daily quota is spent. Use model `gemini-2.5-flash`. |
+| `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` | Pre-filled | Default to the local Docker services above — leave as-is for local dev. |
+
+**Good to know**
+- **First ingest is slow once:** the embedding model (`Xenova/all-MiniLM-L6-v2`, ~30 MB) downloads on first use, then is cached.
+- **Env changes need a restart:** the dev server reads `.env` at startup only — after editing keys, restart `npm run dev` (nodemon does *not* reload on `.env` changes).
+- Stop the local infra with `docker compose down` (add `-v` to also wipe Postgres/Qdrant data).
 
 ---
 

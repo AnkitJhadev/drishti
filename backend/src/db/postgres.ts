@@ -12,7 +12,7 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 10,               // max 10 concurrent connections
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 15000,
   // Enable SSL for hosted databases (managed providers use their own CA chain).
   ...(isLocalDb ? {} : { ssl: { rejectUnauthorized: false } }),
 })

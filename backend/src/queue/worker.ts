@@ -12,7 +12,16 @@ import type { SourceType } from '../rag/chunker'
 // Cast resolves a harmless ioredis version-dedupe type mismatch with bullmq.
 export const redisConnection = new IORedis(
   process.env.REDIS_URL ?? 'redis://localhost:6379',
-  { maxRetriesPerRequest: null }
+  {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    // Upstash closes idle connections — reconnect automatically
+    retryStrategy: (times) => Math.min(times * 500, 5000),
+    reconnectOnError: () => true,
+    // Keep TCP alive so Upstash doesn't drop the idle socket
+    keepAlive: 10000,
+    connectTimeout: 15000,
+  }
 ) as unknown as ConnectionOptions
 
 export function startWorkers(): void {

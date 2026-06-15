@@ -1,4 +1,4 @@
-import { useState, useRef, type DragEvent, type ChangeEvent } from 'react'
+import { useState, useRef, useEffect, type DragEvent, type ChangeEvent } from 'react'
 import api from '../../services/api'
 import { useComplaintsStore } from '../../stores/complaintsStore'
 import Modal from '../Modal'
@@ -28,22 +28,32 @@ export default function IngestionPanel({ open, onClose }: Props) {
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState('')
   const [rejected, setRejected] = useState<Rejection[]>([])
+  const [step, setStep] = useState<'idle' | 'uploading' | 'ingesting' | 'classifying' | 'clustering' | 'done'>('idle')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Live classification progress: the ingestion agent re-emits each complaint
-  // once it's classified (status leaves 'pending'), so we count how many of the
-  // just-uploaded ids have been processed by the agents.
   const complaints = useComplaintsStore((s) => s.complaints)
   const ingestedIds = result?.ids ?? []
   const total = ingestedIds.length
-  const processed =
+  const classified =
     total === 0
       ? 0
       : (() => {
           const ids = new Set(ingestedIds)
           return complaints.filter((c) => ids.has(c.id) && c.status !== 'pending').length
         })()
-  const done = total > 0 && processed >= total
+  const clustered =
+    total === 0
+      ? 0
+      : (() => {
+          const ids = new Set(ingestedIds)
+          return complaints.filter((c) => ids.has(c.id) && (c.status === 'recommended' || c.status === 'resolved')).length
+        })()
+
+  // Advance step based on live complaint status changes from WebSocket
+  useEffect(() => {
+    if (step === 'classifying' && classified >= total && total > 0) setStep('clustering')
+    if (step === 'clustering' && clustered >= total && total > 0) setStep('done')
+  }, [classified, clustered, total, step])
 
   function addFiles(list: FileList | null) {
     if (!list) return
@@ -70,9 +80,12 @@ export default function IngestionPanel({ open, onClose }: Props) {
   async function upload() {
     if (files.length === 0) return
     setUploading(true)
+    setStep('uploading')
     setError('')
     setRejected([])
+    setResult(null)
     try {
+      setStep('ingesting')
       const form = new FormData()
       files.forEach((f) => form.append('files', f))
       const { data } = await api.post<Result>('/ingest', form, {
@@ -81,11 +94,13 @@ export default function IngestionPanel({ open, onClose }: Props) {
       setResult(data)
       setRejected(data.rejected ?? [])
       setFiles([])
+      if ((data.ids ?? []).length > 0) setStep('classifying')
+      else setStep('done')
     } catch (err: unknown) {
       const resp = (err as { response?: { data?: { error?: string; message?: string; rejected?: Rejection[] } } })?.response?.data
-      // A 400 with rejections (nothing valid ingested) — show why.
       setError(resp?.error ?? resp?.message ?? 'Upload failed')
       setRejected(resp?.rejected ?? [])
+      setStep('idle')
     } finally {
       setUploading(false)
     }
@@ -149,35 +164,51 @@ export default function IngestionPanel({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* Result + live agent processing progress */}
-          {result && total === 0 && (
-            <div className="mt-3 px-3 py-2 rounded text-xs" style={{ background: '#064e3b', color: '#6ee7b7' }}>
-              ℹ {result.message}
-            </div>
-          )}
-          {result && total > 0 && (
-            <div
-              className="mt-3 px-3 py-2 rounded text-xs"
-              style={
-                done
-                  ? { background: '#064e3b', color: '#6ee7b7' }
-                  : { background: '#0c2a4a', color: '#93c5fd' }
-              }
-            >
-              {done ? (
-                <span>✓ All {total} complaint{total > 1 ? 's' : ''} ingested and classified by the agents.</span>
-              ) : (
-                <span>
-                  <span className="dr-spinner" /> {total} ingested — agents classifying… {processed}/{total} done
-                </span>
+          {/* Pipeline step tracker */}
+          {step !== 'idle' && (
+            <div className="mt-3 rounded text-xs overflow-hidden" style={{ border: '1px solid #1f2937' }}>
+              {[
+                { key: 'uploading',   label: 'Uploading file',              icon: '📤' },
+                { key: 'ingesting',   label: 'Parsing & saving to database', icon: '💾' },
+                { key: 'classifying', label: `AI classifying complaints (${classified}/${total})`, icon: '🤖' },
+                { key: 'clustering',  label: 'Pattern agent clustering',     icon: '🔍' },
+                { key: 'done',        label: `Done — ${total} complaint${total !== 1 ? 's' : ''} processed`, icon: '✅' },
+              ].map((s, i, arr) => {
+                const stepOrder = ['uploading', 'ingesting', 'classifying', 'clustering', 'done']
+                const currentIdx = stepOrder.indexOf(step)
+                const thisIdx = stepOrder.indexOf(s.key)
+                const isActive = s.key === step
+                const isComplete = thisIdx < currentIdx
+                return (
+                  <div
+                    key={s.key}
+                    className="flex items-center gap-2 px-3 py-2"
+                    style={{
+                      background: isActive ? '#0c2a4a' : isComplete ? '#052e16' : '#0a0f1e',
+                      borderBottom: i < arr.length - 1 ? '1px solid #1f2937' : undefined,
+                      color: isComplete ? '#6ee7b7' : isActive ? '#93c5fd' : '#374151',
+                    }}
+                  >
+                    <span>{isComplete ? '✓' : isActive ? <span className="animate-pulse">{s.icon}</span> : '○'}</span>
+                    <span>{s.label}</span>
+                    {isActive && s.key !== 'done' && (
+                      <span className="ml-auto animate-pulse" style={{ color: '#3b82f6' }}>●</span>
+                    )}
+                  </div>
+                )
+              })}
+              {/* Progress bar */}
+              {step !== 'done' && total > 0 && (
+                <div className="h-1" style={{ background: '#1f2937' }}>
+                  <div
+                    className="h-full transition-[width] duration-700"
+                    style={{
+                      width: `${Math.round((classified / total) * 100)}%`,
+                      background: '#3b82f6',
+                    }}
+                  />
+                </div>
               )}
-              {/* progress bar */}
-              <div className="mt-1.5 h-1 rounded-full overflow-hidden" style={{ background: '#1f2937' }}>
-                <div
-                  className="h-full rounded-full transition-[width] duration-500"
-                  style={{ width: `${Math.round((processed / total) * 100)}%`, background: done ? '#10b981' : '#3b82f6' }}
-                />
-              </div>
             </div>
           )}
           {error && (
@@ -218,7 +249,11 @@ export default function IngestionPanel({ open, onClose }: Props) {
               className="flex-1 py-2 rounded text-sm font-semibold transition-opacity disabled:opacity-40"
               style={{ background: '#f59e0b', color: '#0a0f1e' }}
             >
-              {uploading ? 'Uploading…' : `Ingest ${files.length || ''} file${files.length === 1 ? '' : 's'}`}
+              {step === 'uploading' ? 'Uploading…'
+                : step === 'ingesting' ? 'Saving…'
+                : step === 'classifying' ? `Classifying ${classified}/${total}…`
+                : step === 'clustering' ? 'Clustering…'
+                : `Ingest ${files.length > 0 ? files.length : ''} file${files.length === 1 ? '' : 's'}`}
             </button>
             <button
               onClick={onClose}

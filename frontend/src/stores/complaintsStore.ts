@@ -6,9 +6,14 @@ import type { EnrichedComplaint } from '../types/complaint'
 interface ComplaintsState {
   complaints: EnrichedComplaint[]
   loading: boolean
+  // Bumped each time the pattern agent finishes a pass — lets the ingestion
+  // panel resolve its "clustering" step on a real signal, not a guess.
+  patternTick: number
   setComplaints: (complaints: EnrichedComplaint[]) => void
   addComplaint: (complaint: EnrichedComplaint) => void
   resolveComplaint: (id: string) => void
+  failComplaint: (id: string, reason: string) => void
+  markPatternComplete: () => void
   setLoading: (loading: boolean) => void
 }
 
@@ -17,6 +22,7 @@ export const useComplaintsStore = create<ComplaintsState>()(
     (set) => ({
       complaints: [],
       loading: false,
+      patternTick: 0,
       setComplaints: (complaints) => set({ complaints }),
       addComplaint: (complaint) =>
         set((s) => {
@@ -32,6 +38,13 @@ export const useComplaintsStore = create<ComplaintsState>()(
         set((s) => ({
           complaints: s.complaints.map((c) => (c.id === id ? { ...c, status: 'resolved' } : c)),
         })),
+      failComplaint: (id, reason) =>
+        set((s) => ({
+          complaints: s.complaints.map((c) =>
+            c.id === id ? { ...c, status: 'failed', error: reason } : c
+          ),
+        })),
+      markPatternComplete: () => set((s) => ({ patternTick: s.patternTick + 1 })),
       setLoading: (loading) => set({ loading }),
     }),
     {

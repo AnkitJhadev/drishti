@@ -30,9 +30,10 @@ interface Props {
 
 export default function ComplaintCard({ complaint }: Props) {
   const sev = SEVERITY_STYLE[complaint.severity] ?? SEVERITY_STYLE.low
-  const isPending = complaint.status === 'pending'
+  const isFailed = complaint.status === 'failed'
+  const isPending = (complaint.status === 'pending' || complaint.status === 'processing') && !isFailed
   const isResolved = complaint.status === 'resolved'
-  const accent = isResolved ? '#10b981' : sev.text
+  const accent = isResolved ? '#10b981' : isFailed ? '#f97316' : sev.text
   const [open, setOpen] = useState(false)
 
   return (
@@ -53,6 +54,10 @@ export default function ComplaintCard({ complaint }: Props) {
             <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: '#064e3b', color: '#6ee7b7' }}>
               ✓ RESOLVED
             </span>
+          ) : isFailed ? (
+            <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: '#7c2d12', color: '#fdba74' }}>
+              ⚠ NOT CLASSIFIED
+            </span>
           ) : (
             <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium uppercase" style={{ background: sev.bg, color: sev.text }}>
               {complaint.severity}
@@ -64,15 +69,19 @@ export default function ComplaintCard({ complaint }: Props) {
           {complaint.raw_text}
         </p>
 
-        <div className="flex items-center justify-between text-xs" style={{ color: '#6b7280' }}>
-          <span>
-            {isPending ? (
+        <div className="flex items-center justify-between text-xs gap-2" style={{ color: '#6b7280' }}>
+          <span className="min-w-0 truncate">
+            {isFailed ? (
+              <span style={{ color: '#fb923c' }} title={complaint.error ?? 'Classification failed'}>
+                ⚠ {complaint.error ?? 'Could not classify — try again later'}
+              </span>
+            ) : isPending ? (
               <span style={{ color: '#f59e0b' }}>● analyzing…</span>
             ) : (
               <span style={{ color: '#9ca3af' }}>{complaint.issue_type?.replace(/_/g, ' ') ?? 'unknown'}</span>
             )}
           </span>
-          <span>{timeAgo(complaint.timestamp)}</span>
+          <span className="shrink-0">{timeAgo(complaint.timestamp)}</span>
         </div>
       </div>
 

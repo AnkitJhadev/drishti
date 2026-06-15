@@ -32,6 +32,7 @@ export default function IngestionPanel({ open, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const complaints = useComplaintsStore((s) => s.complaints)
+  const patternTick = useComplaintsStore((s) => s.patternTick)
   const ingestedIds = result?.ids ?? []
   const total = ingestedIds.length
   const classified =
@@ -39,21 +40,33 @@ export default function IngestionPanel({ open, onClose }: Props) {
       ? 0
       : (() => {
           const ids = new Set(ingestedIds)
+          // A classified complaint has moved past 'pending' (or failed outright).
           return complaints.filter((c) => ids.has(c.id) && c.status !== 'pending').length
         })()
-  const clustered =
-    total === 0
-      ? 0
-      : (() => {
-          const ids = new Set(ingestedIds)
-          return complaints.filter((c) => ids.has(c.id) && (c.status === 'recommended' || c.status === 'resolved')).length
-        })()
 
-  // Advance step based on live complaint status changes from WebSocket
+  // The tick value when we entered the clustering step — we only resolve on a
+  // pattern:complete that arrives *after* that, never a stale one.
+  const clusterStartTick = useRef<number | null>(null)
+
+  // classifying → clustering once every ingested complaint has been classified
   useEffect(() => {
     if (step === 'classifying' && classified >= total && total > 0) setStep('clustering')
-    if (step === 'clustering' && clustered >= total && total > 0) setStep('done')
-  }, [classified, clustered, total, step])
+  }, [classified, total, step])
+
+  // clustering → done, driven by the backend's pattern:complete event.
+  // Not all complaints become 'recommended' (many legitimately stay 'clustered'),
+  // so we wait for the agent's real completion signal — with a hard timeout so
+  // the panel can never hang even if the event is missed.
+  useEffect(() => {
+    if (step !== 'clustering') return
+    if (clusterStartTick.current === null) clusterStartTick.current = patternTick
+    if (patternTick > clusterStartTick.current) {
+      setStep('done')
+      return
+    }
+    const timeout = setTimeout(() => setStep('done'), 90_000)
+    return () => clearTimeout(timeout)
+  }, [step, patternTick])
 
   function addFiles(list: FileList | null) {
     if (!list) return
@@ -79,6 +92,7 @@ export default function IngestionPanel({ open, onClose }: Props) {
 
   async function upload() {
     if (files.length === 0) return
+    clusterStartTick.current = null   // fresh run — ignore prior pattern ticks
     setUploading(true)
     setStep('uploading')
     setError('')

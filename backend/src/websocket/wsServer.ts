@@ -70,3 +70,11 @@ export const emitTowerAdded = (tower: unknown): void =>
 
 export const emitComplaintResolved = (id: string): void =>
   emit('complaint:resolved', { id })
+
+export const emitComplaintFailed = (id: string, reason: string): void =>
+  emit('complaint:failed', { id, reason })
+
+// Fired once per pattern-analysis pass so the UI can resolve its "clustering"
+// step deterministically (ok=false when the agent gave up, e.g. LLM quota).
+export const emitPatternComplete = (ok: boolean): void =>
+  emit('pattern:complete', { ok })

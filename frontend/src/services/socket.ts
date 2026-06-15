@@ -51,6 +51,14 @@ export function connectSocket(token: string): void {
   socket.on('complaint:resolved', (data: { id: string }) => {
     useComplaintsStore.getState().resolveComplaint(data.id)
   })
+
+  socket.on('complaint:failed', (data: { id: string; reason: string }) => {
+    useComplaintsStore.getState().failComplaint(data.id, data.reason)
+  })
+
+  socket.on('pattern:complete', () => {
+    useComplaintsStore.getState().markPatternComplete()
+  })
 }
 
 export function disconnectSocket(): void {

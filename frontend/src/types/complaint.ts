@@ -18,6 +18,7 @@ export type ComplaintStatus =
   | 'approved'
   | 'rejected'
   | 'resolved'
+  | 'failed'       // classification couldn't complete (e.g. AI quota exhausted)
 
 export interface ComplaintRecord {
   id: string
@@ -37,4 +38,5 @@ export interface EnrichedComplaint extends ComplaintRecord {
   cluster_id?: string
   tower_id?: string
   confidence: number
+  error?: string   // human-readable reason when status === 'failed'
 }

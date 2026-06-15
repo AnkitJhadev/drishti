@@ -2,9 +2,20 @@ import { Worker, type ConnectionOptions } from 'bullmq'
 import IORedis from 'ioredis'
 import { runIngestionAgent } from '../agents/ingestionAgent'
 import { runPatternAgent } from '../agents/patternAgent'
+import { query } from '../db/postgres'
+import { emitComplaintFailed, emitPatternComplete } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 import type { IngestJobData } from './jobs/ingestJob'
 import type { SourceType } from '../rag/chunker'
+
+// A 429 from any LLM provider means the daily/burst quota is gone — tell the
+// operator that specifically rather than a generic "something broke".
+function failureReason(message: string): string {
+  if (/rate.?limit|429|quota|too many requests|tokens per day|tpd/i.test(message)) {
+    return 'AI service quota reached — this complaint could not be auto-classified. Try again later.'
+  }
+  return 'Auto-classification failed after several retries. Try re-uploading this complaint.'
+}
 
 // Shared Redis connection — used by both Queue and Worker.
 // maxRetriesPerRequest: null is REQUIRED by BullMQ.
@@ -54,6 +65,32 @@ export function startWorkers(): void {
 
   ingestWorker.on('failed', (job, err) => {
     logger.error(`Ingest job ${job?.id} failed: ${err.message}`)
+    if (!job) return
+
+    // BullMQ fires this on every attempt; only act once all retries are spent,
+    // otherwise we'd mark a complaint failed that's about to succeed on retry.
+    const exhausted = job.attemptsMade >= (job.opts.attempts ?? 1)
+    if (!exhausted) return
+
+    const { complaintId } = job.data
+    const reason = failureReason(err.message)
+    void (async () => {
+      try {
+        // Don't clobber a complaint that actually progressed past classification.
+        await query(
+          `UPDATE complaints
+             SET status = 'failed',
+                 metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+           WHERE id = $1
+             AND status IN ('pending', 'processing')`,
+          [complaintId, JSON.stringify({ error: reason, failed_at: new Date().toISOString() })]
+        )
+        emitComplaintFailed(complaintId, reason)
+        logger.warn(`Complaint ${complaintId} marked failed — ${reason}`)
+      } catch (e) {
+        logger.error(`Could not mark complaint ${complaintId} failed: ${String(e)}`)
+      }
+    })()
   })
 
   // ── Pattern worker ─────────────────────────────────────────────────────
@@ -71,10 +108,14 @@ export function startWorkers(): void {
 
   patternWorker.on('completed', (job) => {
     logger.info(`Pattern job ${job.id} completed`)
+    emitPatternComplete(true)
   })
 
   patternWorker.on('failed', (job, err) => {
     logger.error(`Pattern job ${job?.id} failed: ${err.message}`)
+    // Tell the UI to stop waiting once retries are spent (e.g. LLM quota gone),
+    // so the ingestion panel resolves instead of spinning forever.
+    if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) emitPatternComplete(false)
   })
 
   logger.info('BullMQ workers started (ingest + pattern).')

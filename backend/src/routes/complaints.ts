@@ -67,8 +67,13 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       prisma.complaints.count({ where }),
     ])
 
-    // Map lat/lng → coordinates tuple to match the frontend type
-    const complaints = rows.map((r) => ({ ...r, coordinates: [r.lat ?? 0, r.lng ?? 0] }))
+    // Map lat/lng → coordinates tuple, and lift the failure reason out of
+    // metadata so a reloaded page still shows why a complaint wasn't classified.
+    const complaints = rows.map((r) => ({
+      ...r,
+      coordinates: [r.lat ?? 0, r.lng ?? 0],
+      error: (r.metadata as { error?: string } | null)?.error,
+    }))
 
     res.json({
       complaints,

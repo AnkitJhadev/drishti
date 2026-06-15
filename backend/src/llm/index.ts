@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
 import { groqClients, GROQ_MODEL } from './groq'
 import { togetherClient, TOGETHER_MODEL } from './together'
-import { runGeminiTools } from './gemini'
+import { runGeminiTools, hasGeminiKey } from './gemini'
 import { routeFor, type AgentTask, type Provider } from './router'
 import { logger } from '../utils/logger'
 
@@ -122,7 +122,8 @@ async function runOnProvider(
 // A provider is usable only if its API key(s) are actually configured.
 function hasKey(provider: Provider): boolean {
   if (provider === 'groq') return groqClients.length > 0
-  const key = provider === 'together' ? process.env.TOGETHER_API_KEY : process.env.GEMINI_API_KEY
+  if (provider === 'gemini') return hasGeminiKey()
+  const key = process.env.TOGETHER_API_KEY
   return Boolean(key && !key.startsWith('your-'))
 }
 

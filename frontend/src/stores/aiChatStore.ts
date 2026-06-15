@@ -29,7 +29,16 @@ export const useAIChatStore = create<AIChatState>()(
         set((s) => ({ messages: [...s.messages, message] })),
       setRecommendations: (recommendations) => set({ recommendations }),
       addRecommendation: (recommendation) =>
-        set((s) => ({ recommendations: [recommendation, ...s.recommendations] })),
+        set((s) => {
+          // Upsert by id — the pattern agent re-emits recommendation:ready on
+          // every run, so a blind prepend would pile up duplicates (inflating
+          // the Approvals badge well past the real DB count).
+          const idx = s.recommendations.findIndex((r) => r.id === recommendation.id)
+          if (idx === -1) return { recommendations: [recommendation, ...s.recommendations] }
+          const next = s.recommendations.slice()
+          next[idx] = { ...next[idx], ...recommendation }
+          return { recommendations: next }
+        }),
       updateRecommendationStatus: (id, status, operator_note) =>
         set((s) => ({
           recommendations: s.recommendations.map((r) =>

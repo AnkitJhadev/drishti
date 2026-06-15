@@ -18,7 +18,13 @@ export const useAlertsStore = create<AlertsState>()(
       alerts: [],
       loading: false,
       setAlerts: (alerts) => set({ alerts }),
-      addAlert: (alert) => set((s) => ({ alerts: [alert, ...s.alerts] })),
+      addAlert: (alert) =>
+        set((s) => {
+          // Upsert by id — dedupe re-delivered alert:new events so the badge
+          // reflects real alert count, not how many socket events arrived.
+          if (s.alerts.some((a) => a.id === alert.id)) return s
+          return { alerts: [alert, ...s.alerts] }
+        }),
       markRead: (id) =>
         set((s) => ({
           alerts: s.alerts.map((a) => (a.id === id ? { ...a, read: true } : a)),

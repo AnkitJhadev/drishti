@@ -1,93 +1,28 @@
 # Drishti — Telecom AI Operations Platform
 
-[![CI](https://github.com/AnkitJhadev/drishti/actions/workflows/ci.yml/badge.svg)](https://github.com/AnkitJhadev/drishti/actions/workflows/ci.yml)
-
 > _"From complaint to resolution — intelligently."_
 
----
+## 🔴 Live Demo
 
-## 1. Start the project locally
+| | URL |
+|---|---|
+| **Frontend** | [https://drishti-agent-ai.vercel.app](https://drishti-agent-ai.vercel.app) |
+| **Backend API** | [https://drishti-project-sarvam.duckdns.org/health](https://drishti-project-sarvam.duckdns.org/health) |
 
-**Prerequisites:** Node.js 18+, Docker, and a free [Groq API key](https://console.groq.com)
-(the only key required to run locally).
-
-```bash
-# 1. Clone + configure
-git clone https://github.com/AnkitJhadev/drishti.git
-cd drishti
-cp .env.example .env          # then set GROQ_API_KEY and JWT_SECRET (see below)
-
-# 2. Start infrastructure — Postgres + Qdrant + Redis, all local (no cloud accounts needed)
-docker compose up -d
-
-# 3. Backend  (terminal 1)
-cd backend && npm install && npm run dev      # → http://localhost:4000
-
-# 4. Frontend (terminal 2)
-cd frontend && npm install && npm run dev     # → http://localhost:3000
-```
-
-The backend self-bootstraps on first run: it applies the DB schema, creates the
-Qdrant collection, and seeds 20 towers + the demo operator. No manual migration step.
-
-Open **http://localhost:3000** and log in with the pre-filled demo account:
-
-> **Email:** `admin@drishti.com`  **Password:** `drishti@123`
-
-**Try it:** click **＋ Ingest Complaints** and drop in a file from [`sample-data/`](sample-data/)
-(e.g. `complaints.csv`). Watch complaints classify, cluster on the map, and a tower turn critical — live.
-
-### Minimum config in `.env`
-| Variable | Required? | Notes |
-|---|---|---|
-| `GROQ_API_KEY` | **Yes** | Free from [console.groq.com](https://console.groq.com). Add `GROQ_API_KEY_2…_10` to pool quota. |
-| `JWT_SECRET` | **Yes** | Any long random string (`openssl rand -base64 48`). |
-| `GEMINI_API_KEY` | Optional | Fallback when Groq's daily quota is spent. Use model `gemini-2.5-flash`. |
-| `DATABASE_URL` / `REDIS_URL` / `QDRANT_URL` | Pre-filled | Default to the local Docker services above — leave as-is for local dev. |
-
-**Good to know**
-- **First ingest is slow once:** the embedding model (`Xenova/all-MiniLM-L6-v2`, ~30 MB) downloads on first use, then is cached.
-- **Env changes need a restart:** the dev server reads `.env` at startup only — after editing keys, restart `npm run dev` (nodemon does *not* reload on `.env` changes).
-- Stop the local infra with `docker compose down` (add `-v` to also wipe Postgres/Qdrant data).
+**Login credentials:**
+> **Email:** `admin@drishti.com` &nbsp;&nbsp; **Password:** `drishti@123`
 
 ---
 
-## 2. What this project is
+## What this project is
 
 Drishti is an **AI operations dashboard for telecom companies**. Operators receive thousands of
-customer complaints a day across scattered channels (email, PDF, image, SMS, CSV). Drishti reads
+customer complaints a day across scattered channels (email, PDF, SMS, CSV). Drishti reads
 them automatically, groups similar ones, links them to the cell tower at fault, and suggests a fix —
-all on one real-time "command center" screen.
+all on one real-time command-center screen.
 
 It replaces slow manual triage with an automated pipeline, and lets an operator **monitor** the
 network on a live map, **ask questions** in plain English, and **resolve** issues from one place.
-
----
-
-## 3. How it works
-
-```
- Complaint comes in        AI reads & tags it       Similar ones grouped
- (CSV / PDF / email)   →   (issue + severity)   →   (cluster by area)
-                                                            ↓
-   Operator resolves    ←   AI suggests a fix    ←   Cluster linked to
-   (approve / reject)        (root cause +            nearest tower
-                              action)
-```
-
-Four AI agents drive the pipeline, each with one job:
-
-| Agent | Trigger | Does |
-|---|---|---|
-| **Ingestion** | a file is uploaded | parse → classify (issue + severity) → geocode → embed → store |
-| **Pattern** | every N complaints | cluster similar complaints → link to nearest tower → write a recommendation |
-| **NL Query** | operator asks a question | **online:** backend RAG (Groq + Qdrant) → reasoned, grounded answer. **offline:** on-device semantic search in the browser |
-| **Approval** | operator approves/rejects | update statuses → open a resolution ticket |
-
-All agents talk to LLMs through one **provider-agnostic router** (`backend/src/llm/`) that tries
-**Groq → Gemini → Together**, so no single paid API is required. Everything updates live over
-**Socket.io**, and the dashboard is **offline-first** (PWA + IndexedDB) so it keeps working on
-low-bandwidth / disconnected clients.
 
 ---
 
@@ -95,99 +30,99 @@ low-bandwidth / disconnected clients.
 
 Drishti was built to demonstrate the exact frontend capabilities Sarvam AI's
 **Frontend Engineer, Chanakya** role calls for — production-grade interfaces for strategic-sector
-and enterprise AI that hold up in offline-first, low-bandwidth, hardened-client environments. Each
-requirement maps to something real and working here:
+and enterprise AI that hold up in offline-first, low-bandwidth, hardened-client environments.
 
 | Chanakya requirement | Where it lives in Drishti |
 |---|---|
 | Geospatial overlays | React-Leaflet map — status pins, complaint heatmap, click-to-place towers |
-| Simulation UIs | what-if tower-failure impact simulator |
+| Simulation UIs | What-if tower-failure impact simulator (haversine redistribution model) |
 | Natural-language access layers | RAG chat grounded in real complaint data |
-| Ontology viewers | D3 force-directed network graph |
-| Data ingestion dashboards | drag-drop multi-file upload with strict validation + live agent progress |
-| Complex enterprise workflows | real-time approvals, escalation, and resolution flows |
-| State management | Zustand stores + an offline action queue |
-| Data visualisation | D3 · React-Leaflet · Recharts |
+| Ontology viewers | D3 force-directed network graph (towers → clusters → recommendations) |
+| Data ingestion dashboards | Drag-drop multi-file upload with live AI pipeline progress tracker |
+| Complex enterprise workflows | Real-time approvals, escalation, and resolution flows |
+| State management | Zustand stores + offline action queue |
+| Data visualisation | D3 · React-Leaflet · Recharts (4-tab analytics) |
 | REST + WebSocket integration | Axios + Socket.io (live complaints, alerts, tower status) |
-| Performance engineering | code-splitting + lazy-loaded heavy chunks ([`docs/performance.md`](docs/performance.md)) |
-| Offline-first / low-bandwidth | PWA + IndexedDB persistence + queue-and-sync of actions made offline |
-| WebGL / Three.js (bonus) | 3D network command view |
-
-### Key engineering decisions (built for the hardened-client brief)
-
-- **Offline-first caching** — every Zustand store (complaints, towers, alerts, **AI chat +
-  recommendations**, auth, action-queue) persists to **IndexedDB** via `idb-keyval`; the PWA service
-  worker precaches the app shell and `CacheFirst`-caches map tiles + the on-device model.
-- **On-device AI fallback** — the NL assistant runs the embedding model **in the browser**
-  (Transformers.js → ONNX Runtime Web / WASM) for semantic search with **zero backend calls** when offline.
-- **Offline action queue** — approvals/resolves made offline are persisted and **replayed on reconnect**.
-- **Resilient LLM layer** — **multi-key Groq rotation** → Gemini fallback with a **rate-limit cooldown**,
-  so a throttled key/provider never breaks a request.
-- **Performance** — heavy chunks (Three.js, D3, recharts) lazy-loaded off the critical path.
-- **Strict validated ingestion** — CSV / PDF / JSON only, with **zod** request validation + per-row rejection.
-- **Production hygiene** — TypeScript end-to-end, CI (typecheck + tests + build), unit tests, dependency-CVE pins.
+| Performance engineering | Code-splitting + lazy-loaded heavy chunks |
+| Offline-first / low-bandwidth | PWA + IndexedDB persistence + queue-and-sync of offline actions |
+| WebGL / Three.js (bonus) | 3D network command view (tower pillars, coverage domes, OrbitControls) |
 
 ---
 
-## Offline & resilience
-
-Drishti is built to keep working when the network drops — the Chanakya brief calls for
-offline-first, low-bandwidth, hardened clients. How it handles a connection loss:
-
-- **App shell is a PWA** (`vite-plugin-pwa` + Workbox) — the UI loads with no network at all.
-- **All live data is cached in IndexedDB.** Every Zustand store (complaints, towers, alerts,
-  **AI chat + recommendations**, auth) persists locally, so the dashboard renders cached state
-  instantly on reload or offline — including previously received AI answers.
-- **Map tiles cache** with a `CacheFirst` strategy (7-day), so the map still renders offline.
-- **Actions taken offline are queued, not lost.** Approve / reject / resolve while disconnected
-  are written to an IndexedDB **action queue** and **replayed automatically on reconnect**
-  (`window.online` + socket reconnect). A banner shows the pending count and "syncing…" state.
-- **Live updates degrade gracefully** — the Socket.io connection drives a `LIVE / CONNECTING /
-  OFFLINE` indicator; on reconnect it re-syncs and flushes the queue.
-- **On-device AI as the offline fallback.** The NL assistant switches on the connection state:
-  - **Online (default):** calls the backend → full RAG with the LLM (Groq + Qdrant) → reasoned,
-    grounded answers with map/chart hints.
-  - **Offline (no network):** runs **in the browser** — the same embedding model
-    (`all-MiniLM-L6-v2`) executes client-side via **Transformers.js / ONNX Runtime Web (WASM)** and
-    does semantic search over the IndexedDB-cached complaints, with **zero backend calls**.
-
-  The engine is lazy-loaded (its own chunk, excluded from the precache) and the model weights + WASM
-  are cached for offline use. The online path is unchanged. → `src/services/localEmbedder.ts`,
-  `src/components/ai/NLQueryChat.tsx`
+## How it works
 
 ```
-offline → optimistic UI update → action queued in IndexedDB
-        ↘ banner: "2 actions queued — will sync on reconnect"
-reconnect → flushQueue() replays each action → banner clears
+ Complaint comes in        AI reads & tags it       Similar ones grouped
+ (CSV / PDF / JSON)    →   (issue + severity)   →   (cluster by area)
+                                                            ↓
+   Operator resolves    ←   AI suggests a fix    ←   Cluster linked to
+   (approve / reject)        (root cause +            nearest tower
+                              action)
 ```
 
-See `src/services/actionQueue.ts`, `src/stores/*` (persist + `idbStorage`), and `vite.config.ts`.
+Four AI agents drive the pipeline:
+
+| Agent | Trigger | Does |
+|---|---|---|
+| **Ingestion** | file uploaded | parse → classify → geocode → embed → store |
+| **Pattern** | every N complaints | cluster → link to tower → write recommendation |
+| **NL Query** | operator asks a question | RAG (Groq + Qdrant) → grounded answer with map/chart hints |
+| **Approval** | operator approves/rejects | update statuses → resolve complaints |
+
+All agents use a **provider-agnostic LLM router** (`Groq → Gemini → Together`) with multi-key rotation — no single paid API is required.
 
 ---
 
-## Engineering highlights
+## Key engineering decisions
 
-The harder client-side problems this project solves:
-
-- **Offline action queue (a client-side state machine).** Approvals/resolves made offline can't
-  hang or be lost. `sendOrQueue` updates the UI optimistically, persists the action to IndexedDB
-  on a *network* failure (distinguishing connectivity drops from real 4xx rejections), and replays
-  the queue on reconnect — with a single-flight guard against double-sends and poison-action
-  dropping so the queue can't get stuck. → `src/services/actionQueue.ts`
-- **Reconciling streaming WebSocket updates.** Each complaint streams in twice — once on ingest as
-  `pending`, again after AI classification. A naive append double-rendered every row; the store now
-  **upserts by id**, and a live tracker reconciles a whole ingest batch into a `processed / total`
-  progress bar without re-render churn. → `src/stores/complaintsStore.ts`, `IngestionPanel.tsx`
-- **Rendering performance on low-spec clients.** Three.js (~226 KB gzip) and D3 were dragging first
-  paint, so they're behind `React.lazy` + feature code-splitting and never touch the initial bundle.
-  Before/after numbers in [`docs/performance.md`](docs/performance.md).
+- **Offline-first** — every Zustand store persists to IndexedDB via `idb-keyval`; PWA service worker precaches the app shell
+- **On-device AI fallback** — NL assistant runs `all-MiniLM-L6-v2` in the browser via Transformers.js / ONNX Runtime Web for zero-backend offline search
+- **Offline action queue** — approvals/resolves made offline are persisted and replayed on reconnect
+- **Multi-key Groq rotation** → Gemini fallback with rate-limit cooldown — throttled keys never break a request
+- **Web Workers** — CSV/JSON/PDF parsed off the main thread with real-time progress
+- **Code splitting** — Three.js, D3, Recharts lazy-loaded off the critical path
 
 ---
 
 ## Tech stack
 
-**Frontend:** React 18 + TypeScript + Vite · Tailwind · Zustand · React-Leaflet · Recharts · D3 · Three.js · Socket.io-client · PWA
-**Backend:** Node + Express + TypeScript · BullMQ · PostgreSQL · Qdrant (vectors) · local embeddings (`@xenova/transformers`) · Socket.io
+**Frontend:** React 18 · TypeScript · Vite · Tailwind · Zustand · React-Leaflet · Recharts · D3 · Three.js · Socket.io-client · PWA (Workbox)
+
+**Backend:** Node.js · Express · TypeScript · BullMQ · PostgreSQL (Neon) · Qdrant Cloud · Redis (Upstash) · local embeddings (`@xenova/transformers`) · Socket.io
+
+**Infrastructure:** AWS EC2 (t2.micro) · Caddy (HTTPS/TLS) · Docker Compose · Vercel (frontend)
+
+---
+
+## Run locally
+
+**Prerequisites:** Node.js 18+, Docker, free [Groq API key](https://console.groq.com)
+
+```bash
+# 1. Clone + configure
+git clone https://github.com/AnkitJhadev/drishti.git
+cd drishti
+cp .env.example .env          # set GROQ_API_KEY and JWT_SECRET
+
+# 2. Start infrastructure
+docker compose up -d          # Postgres + Qdrant + Redis
+
+# 3. Backend (terminal 1)
+cd backend && npm install && npm run dev      # → http://localhost:4000
+
+# 4. Frontend (terminal 2)
+cd frontend && npm install && npm run dev     # → http://localhost:3000
+```
+
+Log in with `admin@drishti.com` / `drishti@123`, then drop a file from [`sample-data/`](sample-data/) into the Ingest panel.
+
+### Minimum `.env` config
+
+| Variable | Required? | Notes |
+|---|---|---|
+| `GROQ_API_KEY` | **Yes** | Free from [console.groq.com](https://console.groq.com). Add `GROQ_API_KEY_2…_10` to pool quota. |
+| `JWT_SECRET` | **Yes** | Any long random string (`openssl rand -base64 48`) |
+| `GEMINI_API_KEY` | Optional | Fallback LLM when Groq quota is spent |
 
 ---
 
@@ -197,10 +132,10 @@ The harder client-side problems this project solves:
 drishti/
 ├── backend/src/
 │   ├── routes/        REST endpoints (auth, ingest, complaints, towers, ai, …)
-│   ├── agents/        the 4 AI agents (ingestion, pattern, nlQuery, approval)
+│   ├── agents/        4 AI agents (ingestion, pattern, nlQuery, approval)
 │   ├── llm/           provider router (Groq → Gemini → Together)
 │   ├── rag/           chunker → embedder → indexer → retriever
-│   ├── parsers/       CSV + PDF readers (with strict validation)
+│   ├── parsers/       CSV + PDF + JSON readers (strict validation)
 │   ├── queue/         BullMQ jobs + worker
 │   ├── db/            Postgres, Qdrant, migrations, seed
 │   └── websocket/     Socket.io server
@@ -208,122 +143,53 @@ drishti/
     ├── pages/         Login, Dashboard
     ├── components/    map · analytics · complaints · ai · approval · ontology · simulation · three
     ├── stores/        Zustand (complaints, towers, alerts, aiChat, auth, action-queue)
-    └── services/      api (axios) · socket · offline action-queue
+    ├── workers/       Web Workers (CSV/JSON/PDF parsing off main thread)
+    └── services/      api · socket · offline action-queue · localEmbedder
 ```
-
-More detail: [`docs/performance.md`](docs/performance.md) (bundle strategy) · [`sample-data/README.md`](sample-data/README.md) (data format).
 
 ---
 
 ## API reference
 
 ```
-POST   /auth/login                    → { token, operator }
-GET    /complaints  ·  GET /complaints/:id
-POST   /ingest                        → upload .csv / .pdf complaint reports
-GET    /towers  ·  GET /towers/:id  ·  POST /towers   (add a tower)
-GET    /alerts  ·  PATCH /alerts/:id/read
-GET    /recommendations  ·  PATCH /recommendations/:id/{approve|reject|escalate|resolve}
-POST   /ai/chat                       → natural-language query (RAG)
+POST   /auth/login
+GET    /complaints   GET /complaints/:id   PATCH /complaints/:id/resolve
+POST   /ingest                             → upload .csv / .pdf / .json
+POST   /ingest/records                     → client-parsed records (Web Worker path)
+GET    /towers   GET /towers/:id   POST /towers
+GET    /alerts   PATCH /alerts/:id/read
+GET    /recommendations   PATCH /recommendations/:id/{approve|reject|resolve}
+POST   /ai/chat                            → natural-language RAG query
+DELETE /ai/chat/history                    → clear conversation memory
+GET    /ontology                           → graph nodes + links for D3
 ```
 
-All routes except `/auth/login` need `Authorization: Bearer <token>`.
+All routes except `/auth/login` require `Authorization: Bearer <token>`.
 
 ---
 
-## Ingestion format (strict)
+## Ingestion format
 
-You **cannot upload arbitrary data** — only **`.csv`**, **`.pdf`** and **`.json`** are accepted, and
-the content must follow a fixed structure. Anything else is **rejected with a specific reason** (shown
-per file and per row in the ingestion panel); valid rows in a partially-bad file still go through.
+Accepts `.csv`, `.pdf`, and `.json` only. Invalid rows are rejected per-row with a reason shown in the UI.
 
-### CSV — required structure
-Header row **must** contain `complaint` and `location` (`phone` optional):
-
+**CSV** — must have `complaint` + `location` columns (`phone` optional):
 ```csv
 complaint,location,phone
-"No network signal since this morning",Bandra Mumbai,9820011001
+"No network signal since morning",Bandra Mumbai,9820011001
 ```
 
-| Column | Rule |
-|---|---|
-| `complaint` | required, non-empty text |
-| `location` | required, **must be a known city/area** (so it can be mapped + correlated to a tower) |
-| `phone` | optional |
-
-### PDF — required structure
-A complaint report that **must contain a `Location:` (or `Service Area:`) field** with a known
-city/area, plus complaint text. See any `sample-data/complaint_*.pdf`.
-
-### JSON — required structure
-An array of objects (or `{ "complaints": [...] }`); each item needs `complaint` + a known `location`
-(`phone`/`timestamp` optional). Same per-row validation as CSV. See `sample-data/complaints.json`:
+**JSON** — array of `{ complaint, location, phone? }`:
 ```json
-[{ "complaint": "No signal in Bandra", "location": "Bandra Mumbai", "phone": "9820012001" }]
+[{ "complaint": "No signal in Bandra", "location": "Bandra Mumbai" }]
 ```
 
-### What gets rejected (and why)
-| Case | Result |
-|---|---|
-| File is not `.csv` / `.pdf` / `.json` | rejected at upload |
-| CSV missing `complaint` or `location` header | **whole file** rejected — `"missing required column(s)…"` |
-| Row with empty complaint or location | that **row** rejected |
-| Location not recognised (e.g. `Goa`, `Lucknow`) | that **row/file** rejected — `"unknown location…"` |
-| PDF with no `Location:` field | rejected — `"missing a Location field…"` |
-
-> **Known locations** map 1:1 to the seeded towers (Delhi, Mumbai/Bandra/Andheri, Bengaluru/Whitefield,
-> Chennai/OMR, Kolkata, Hyderabad, Pune/Hinjewadi, Ahmedabad, Jaipur, …). Full list + sample files in
-> [`sample-data/README.md`](sample-data/README.md). Validation lives in `backend/src/parsers/` and
-> `backend/src/routes/ingest.ts`.
-
----
-
-## Develop & verify
-
-```bash
-cd backend  && npx tsc --noEmit && npm test     # types + unit tests
-cd frontend && npm run typecheck && npm run build
-```
-
-- TypeScript everywhere (no `any`); all API calls go through `services/api.ts`.
-- CI (GitHub Actions) runs typecheck + test + build on every push.
-- Commits are plain human-style (no AI co-author line).
-
----
-
-## Security (dependency posture)
-
-`npm audit` status, with the reasoning behind what's fixed vs. accepted:
-
-- **Backend: 0 known vulnerabilities.** The `protobufjs` advisories (transitive via
-  `onnxruntime` ← `@xenova/transformers`) are resolved with an `overrides` pin to a patched
-  `protobufjs`, **verified to keep on-device embeddings working** (the model still loads + embeds).
-  The unused `voyageai` SDK was removed, clearing its `qs` advisories.
-- **Frontend: 2 moderate, dev-server-only.** A Vite dev-server path-traversal advisory — it only
-  affects `vite dev` on a local machine, **not the production build** (which ships static files).
-  The sole fix is a Vite **major upgrade** (breaking, risks the build + PWA config), so it's an
-  accepted, assessed risk rather than a forced fix. `npm audit fix --force` is intentionally avoided
-  (it downgrades `@xenova/transformers` and breaks embeddings).
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| `AggregateError` on backend start | Run `docker compose up -d` first — Postgres/Qdrant/Redis must be up. |
-| Agents don't classify | Set `GROQ_API_KEY` (free). Free tier ~100K tokens/day — add `GEMINI_API_KEY` as fallback. |
-| First RAG query is slow | Local embedding model (~30 MB) downloads once, then cached. |
-| 401 on every request | JWT expired (8h) — log in again. |
+**PDF** — complaint report with a `Location:` field and complaint text body.
 
 ---
 
 ## Deployment
 
-**Production target:** Vercel (frontend) + AWS EC2 (backend + Qdrant + Caddy/HTTPS) with
-Neon (Postgres) and Upstash (Redis) as managed stores. Full step-by-step runbook —
-instance sizing, security groups, DNS/TLS, secrets, CORS — in **[`DEPLOY.md`](DEPLOY.md)**.
-The host stack is defined in [`docker-compose.prod.yml`](docker-compose.prod.yml) + [`Caddyfile`](Caddyfile); copy [`.env.prod.example`](.env.prod.example) → `.env.prod` and fill it in.
+Frontend on **Vercel**, backend on **AWS EC2 t2.micro** with Caddy for HTTPS.
+Managed services: **Neon** (Postgres) · **Upstash** (Redis) · **Qdrant Cloud**.
 
-> [`render.yaml`](render.yaml) is an older Render-based alternative and is currently **stale**
-> (see the note at the end of `DEPLOY.md`). The EC2 path above is the supported one.
+Full runbook: [`DEPLOY.md`](DEPLOY.md)

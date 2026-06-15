@@ -58,6 +58,18 @@ const TOOLS: Anthropic.Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'get_recommendations_summary',
+    description:
+      'Get counts of AI recommendations (the "approvals" queue) by status: pending = awaiting operator approval, ' +
+      'plus approved and rejected. Use this for ANY question about approvals, pending actions, or recommended fixes ' +
+      '(e.g. "how many are waiting for approval?").',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
 ]
 
 interface ToolContext {
@@ -131,6 +143,31 @@ function makeExecutor(ctx: ToolContext) {
       return { towers: rows }
     }
 
+    if (name === 'get_recommendations_summary') {
+      const rows = await query<{ status: string; count: string }>(
+        `SELECT status, COUNT(*) as count FROM recommendations GROUP BY status`
+      )
+      const by_status: Record<string, number> = { pending: 0, approved: 0, rejected: 0 }
+      let total = 0
+      rows.forEach((r) => {
+        const n = parseInt(r.count, 10)
+        by_status[r.status] = n
+        total += n
+      })
+
+      // A few highest-priority pending ones for context (and map highlight).
+      const pending = await query<{ id: string; priority: string; root_cause: string; tower_id: string | null; tower_name: string | null }>(
+        `SELECT r.id, r.priority, r.root_cause, r.tower_id, t.name as tower_name
+         FROM recommendations r LEFT JOIN towers t ON r.tower_id = t.id
+         WHERE r.status = 'pending'
+         ORDER BY CASE r.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
+         LIMIT 5`
+      )
+      pending.forEach((p) => { if (p.tower_id) ctx.highlights.add(p.tower_id) })
+
+      return { total, by_status, waiting_for_approval: by_status.pending, top_pending: pending }
+    }
+
     if (name === 'get_cluster_summary') {
       const rows = await query(
         `SELECT cl.id, cl.issue_type, cl.size, cl.status, cl.tower_id,
@@ -162,7 +199,7 @@ You help engineers triage network incidents, investigate complaints, and monitor
 ## Domain knowledge
 - Towers are identified by IDs like T-101, T-102, … T-120. Each tower has a status: operational | degraded | critical | offline.
 - A tower becomes "degraded" when it has active complaints; "critical" when complaint volume is high; "offline" when unreachable.
-- Complaints are filed by subscribers and classified into issue types: signal_loss, slow_data, call_drop, no_service, billing, other.
+- Complaints are filed by subscribers and classified into issue types: network_outage, call_drop, slow_internet, tower_failure, billing_issue, unknown.
 - Severity levels: low, medium, high, critical.
 - Clusters are groups of geographically or topically correlated complaints that the pattern agent has linked to one or more towers.
 - Recommendations are AI-generated action items tied to a cluster (e.g. "dispatch maintenance to T-112").
@@ -172,6 +209,7 @@ You help engineers triage network incidents, investigate complaints, and monitor
 - get_tower_status: look up one or more towers by ID or status filter. Always call this when the user asks about tower health.
 - get_complaints_by_filter: get counts broken down by issue_type, severity, or status — use for trend questions and summaries.
 - get_cluster_summary: get open incident clusters with their linked towers — use for "what's the biggest incident right now?".
+- get_recommendations_summary: counts of recommendations/approvals by status (pending = awaiting approval) — use for "how many are waiting for approval?" and approval-queue questions.
 
 ## Response rules
 1. ALWAYS ground every number, tower ID, and incident in data returned by a tool. Never invent.

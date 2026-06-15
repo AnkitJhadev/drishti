@@ -5,6 +5,7 @@ import { runNLQueryAgent } from '../agents/nlQueryAgent'
 import { getRecentHistory, recordUserMessage, recordAssistantMessage } from '../memory/chatMemory'
 import { validateBody } from '../middleware/validate'
 import { chatSchema, type ChatBody } from '../schemas/ai.schema'
+import { query } from '../db/postgres'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -54,6 +55,18 @@ router.post('/chat', requireAuth, chatLimiter, validateBody(chatSchema), async (
   } catch (err) {
     logger.error(`POST /ai/chat error: ${String(err)}`)
     res.status(500).json({ error: 'Chat failed' })
+  }
+})
+
+// DELETE /ai/chat/history — clears conversation memory for the logged-in operator
+router.delete('/chat/history', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    await query(`DELETE FROM chat_messages WHERE operator_id = $1`, [req.operator!.id])
+    logger.info(`Chat history cleared for operator ${req.operator!.id}`)
+    res.json({ message: 'Chat history cleared' })
+  } catch (err) {
+    logger.error(`DELETE /ai/chat/history error: ${String(err)}`)
+    res.status(500).json({ error: 'Failed to clear history' })
   }
 })
 

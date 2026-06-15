@@ -16,6 +16,7 @@ interface AIChatState {
     operator_note?: string
   ) => void
   setLoading: (loading: boolean) => void
+  clearMessages: () => void
 }
 
 export const useAIChatStore = create<AIChatState>()(
@@ -36,6 +37,7 @@ export const useAIChatStore = create<AIChatState>()(
           ),
         })),
       setLoading: (loading) => set({ loading }),
+      clearMessages: () => set({ messages: [] }),
     }),
     {
       name: 'drishti-ai-chat',

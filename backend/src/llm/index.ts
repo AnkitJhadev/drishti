@@ -23,6 +23,10 @@ function toOpenAITools(tools: Anthropic.Tool[]): OpenAI.Chat.ChatCompletionTool[
         _noop: { type: 'string', description: 'unused; leave empty' },
       }
     }
+    // Llama also rejects schemas with required: [] (empty array) — remove it.
+    if (Array.isArray(schema.required) && (schema.required as string[]).length === 0) {
+      delete schema.required
+    }
     return {
       type: 'function',
       function: {

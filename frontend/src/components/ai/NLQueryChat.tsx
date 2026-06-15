@@ -22,8 +22,18 @@ const SUGGESTIONS = [
 export default function NLQueryChat() {
   const messages = useAIChatStore((s) => s.messages)
   const addMessage = useAIChatStore((s) => s.addMessage)
+  const clearMessages = useAIChatStore((s) => s.clearMessages)
   const loading = useAIChatStore((s) => s.loading)
   const setLoading = useAIChatStore((s) => s.setLoading)
+
+  async function clearHistory() {
+    try {
+      await api.delete('/ai/chat/history')
+    } catch {
+      // best-effort — clear frontend even if backend fails
+    }
+    clearMessages()
+  }
 
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -125,9 +135,17 @@ export default function NLQueryChat() {
       <div className="flex items-center gap-2 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid #1f2937' }}>
         <span style={{ color: '#f59e0b' }}>✦</span>
         <span className="dr-title">Ask Drishti</span>
-        <span className="text-xs" style={{ color: '#6b7280' }}>
-          AI network assistant
-        </span>
+        <span className="text-xs" style={{ color: '#6b7280' }}>AI network assistant</span>
+        {messages.length > 0 && (
+          <button
+            onClick={() => void clearHistory()}
+            className="ml-auto text-xs px-2 py-0.5 rounded transition-colors"
+            style={{ color: '#6b7280', border: '1px solid #1f2937' }}
+            title="Clear chat history"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Messages */}

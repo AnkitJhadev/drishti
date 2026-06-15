@@ -54,7 +54,66 @@ app.use(errorHandler)
 // ── Bootstrap ────────────────────────────────────────────
 const PORT = process.env.PORT ?? 4000
 
+async function checkConnections(): Promise<void> {
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  logger.info('  Drishti — checking cloud service connections')
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+  // 1. PostgreSQL (Neon) — retry once; free tier cold-starts can take ~10s
+  try {
+    const { query } = await import('./db/postgres')
+    let rows: { version: string }[] = []
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        rows = await query<{ version: string }>('SELECT version()')
+        break
+      } catch (e) {
+        if (attempt === 2) throw e
+        logger.warn(`  ⏳  PostgreSQL (Neon)   — cold start, retrying in 5s…`)
+        await new Promise((r) => setTimeout(r, 5000))
+      }
+    }
+    const ver = rows[0].version.split(' ').slice(0, 2).join(' ')
+    logger.info(`  ✅  PostgreSQL (Neon)   — connected  [${ver}]`)
+  } catch (e) {
+    logger.error(`  ❌  PostgreSQL (Neon)   — FAILED: ${String(e)}`)
+    throw e
+  }
+
+  // 2. Redis (Upstash)
+  try {
+    const IORedis = (await import('ioredis')).default
+    const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 8000,
+    })
+    const pong = await redis.ping()
+    redis.disconnect()
+    logger.info(`  ✅  Redis    (Upstash)  — connected  [${pong}]`)
+  } catch (e) {
+    logger.error(`  ❌  Redis    (Upstash)  — FAILED: ${String(e)}`)
+    throw e
+  }
+
+  // 3. Qdrant Cloud
+  try {
+    const { QdrantClient } = await import('@qdrant/js-client-rest')
+    const qdrant = new QdrantClient({
+      url: process.env.QDRANT_URL ?? 'http://localhost:6333',
+      apiKey: process.env.QDRANT_API_KEY,
+    })
+    await qdrant.getCollections()
+    logger.info(`  ✅  Qdrant   (Cloud)    — connected`)
+  } catch (e) {
+    logger.error(`  ❌  Qdrant   (Cloud)    — FAILED: ${String(e)}`)
+    throw e
+  }
+
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+}
+
 async function bootstrap(): Promise<void> {
+  await checkConnections()
   await runMigrations()
   await initQdrant()
   await seedTowers()

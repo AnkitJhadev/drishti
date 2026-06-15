@@ -236,11 +236,21 @@ async function toolExecutor(
         )
       }
 
-      // Update tower's active_complaints counter
+      // Update tower's active_complaints counter and recalculate status from count.
+      // Thresholds: 0 → operational, 1–4 → degraded, 5+ → critical.
+      // Never downgrade a tower that is already offline (manually set).
       if (tower_id) {
         await client.query(
-          `UPDATE towers SET active_complaints = active_complaints + $1,
-           affected_users = affected_users + $2 WHERE id = $3`,
+          `UPDATE towers
+           SET active_complaints = active_complaints + $1,
+               affected_users    = affected_users + $2,
+               status = CASE
+                 WHEN status = 'offline' THEN 'offline'
+                 WHEN active_complaints + $1 >= 5 THEN 'critical'
+                 WHEN active_complaints + $1 >= 1 THEN 'degraded'
+                 ELSE 'operational'
+               END
+           WHERE id = $3`,
           [complaint_ids.length, complaint_ids.length * 150, tower_id]
         )
       }

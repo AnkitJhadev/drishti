@@ -101,6 +101,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
         {/* Simulation */}
         <button
+          data-tour="simulation"
           onClick={() => setSimOpen(true)}
           className="w-full flex items-center gap-3 px-3 py-2 rounded mt-1 text-sm transition-colors"
           style={{ background: '#1a2235', color: '#60a5fa', border: '1px solid #1f2937' }}
@@ -121,6 +122,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
         {/* Ingest button */}
         <button
+          data-tour="ingest"
           onClick={() => setIngestOpen(true)}
           className="dr-btn-accent w-full flex items-center justify-center gap-2 px-3 py-2 mt-2 text-sm"
         >

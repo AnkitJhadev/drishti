@@ -76,6 +76,16 @@ export default function TopBar({ onMenuClick }: Props) {
           </span>
         </div>
 
+        {/* Replay guided tour */}
+        <button
+          onClick={() => window.dispatchEvent(new Event('drishti:start-tour'))}
+          className="text-xs px-2 py-1 rounded transition-colors hidden sm:inline-flex items-center gap-1"
+          style={{ background: '#1a2235', color: '#9ca3af', border: '1px solid #1f2937' }}
+          title="Take a guided tour of the dashboard"
+        >
+          <span>🧭</span> Tour
+        </button>
+
         {/* Operator dropdown */}
         <div className="flex items-center gap-2 pl-4" style={{ borderLeft: '1px solid #1f2937' }}>
           <div className="text-right">

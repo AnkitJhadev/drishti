@@ -34,3 +34,4 @@ frontend/.vite/
 # PWA
 frontend/public/sw.js
 frontend/public/workbox-*.js
+CLAUDE.md

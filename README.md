@@ -7,7 +7,7 @@
 | | URL |
 |---|---|
 | **Frontend** | [https://drishti-agent-ai.vercel.app](https://drishti-agent-ai.vercel.app) |
-| **Backend API** | [https://drishti-project-sarvam.duckdns.org/health](https://drishti-project-sarvam.duckdns.org/health) |
+
 
 **Login credentials:**
 > **Email:** `admin@drishti.com` &nbsp;&nbsp; **Password:** `drishti@123`

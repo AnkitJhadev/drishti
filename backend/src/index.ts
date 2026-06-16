@@ -31,7 +31,20 @@ const httpServer = createServer(app)
 // the client (rate limiting keys on it), not the proxy.
 app.set('trust proxy', 1)
 app.use(helmet())
-app.use(cors({ origin: FRONTEND_URL, credentials: true }))
+const allowedOrigins = [
+  FRONTEND_URL,
+  process.env.FRONTEND_URL_2,
+].filter(Boolean) as string[]
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return cb(null, true)
+    if (allowedOrigins.some((o) => origin.startsWith(o))) return cb(null, true)
+    cb(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 
 // ── Routes ───────────────────────────────────────────────
@@ -80,19 +93,18 @@ async function checkConnections(): Promise<void> {
     throw e
   }
 
-  // 2. Redis (Upstash)
+  // 2. Redis (Upstash) — warn only, don't crash (queue still starts, jobs retry)
   try {
     const IORedis = (await import('ioredis')).default
     const redis = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
       maxRetriesPerRequest: 1,
-      connectTimeout: 8000,
+      connectTimeout: 10000,
     })
     const pong = await redis.ping()
     redis.disconnect()
     logger.info(`  ✅  Redis    (Upstash)  — connected  [${pong}]`)
   } catch (e) {
-    logger.error(`  ❌  Redis    (Upstash)  — FAILED: ${String(e)}`)
-    throw e
+    logger.warn(`  ⚠️   Redis    (Upstash)  — UNREACHABLE: ${String(e)} (jobs will retry)`)
   }
 
   // 3. Qdrant Cloud

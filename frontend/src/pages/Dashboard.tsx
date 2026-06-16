@@ -5,6 +5,7 @@ import StatsBar from '../components/analytics/StatsBar'
 import ComplaintFeed from '../components/complaints/ComplaintFeed'
 import NLQueryChat from '../components/ai/NLQueryChat'
 import ApprovalPanel from '../components/approval/ApprovalPanel'
+import DashboardTour from '../components/tour/DashboardTour'
 
 // Defer the heavy charts (recharts) chunk so map + feed paint first.
 const AnalyticsPanel = lazy(() => import('../components/analytics/AnalyticsPanel'))
@@ -44,7 +45,7 @@ export default function Dashboard() {
         <StatsBar />
 
         {/* Map — full width, tall, expandable (Hour 8) */}
-        <div id="section-towers" style={{ scrollMarginTop: 12 }}>
+        <div id="section-towers" data-tour="map" style={{ scrollMarginTop: 12 }}>
           <DrishtiMap />
         </div>
 
@@ -61,13 +62,14 @@ export default function Dashboard() {
         </div>
 
         {/* NL Query chat (Hour 10) */}
-        <div style={{ height: 320 }}>
+        <div data-tour="chat" style={{ height: 320 }}>
           <NLQueryChat />
         </div>
       </div>
 
       {/* Floating Approvals button */}
       <button
+        data-tour="approvals"
         onClick={() => setApprovalOpen(true)}
         aria-label={`Open approvals${pendingCount > 0 ? `, ${pendingCount} pending` : ''}`}
         className="dr-btn-accent fixed z-[1400] flex items-center gap-2 px-4 py-2.5 text-sm shadow-lg transition-transform hover:-translate-y-0.5"
@@ -86,6 +88,9 @@ export default function Dashboard() {
 
       {/* Approval drawer — Hour 11 ✓ */}
       <ApprovalPanel open={approvalOpen} onClose={() => setApprovalOpen(false)} />
+
+      {/* First-run guided tour */}
+      <DashboardTour />
     </Layout>
   )
 }

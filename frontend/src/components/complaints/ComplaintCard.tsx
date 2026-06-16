@@ -1,14 +1,8 @@
-import { useState, lazy, Suspense } from 'react'
-import type { EnrichedComplaint, Severity } from '../../types/complaint'
+import { useState, lazy, Suspense, memo } from 'react'
+import type { EnrichedComplaint } from '../../types/complaint'
+import { color, SEVERITY, STATE } from '../../theme/tokens'
 
 const ComplaintDetailModal = lazy(() => import('./ComplaintDetailModal'))
-
-const SEVERITY_STYLE: Record<Severity, { bg: string; text: string }> = {
-  low:      { bg: '#374151', text: '#9ca3af' },
-  medium:   { bg: '#92400e', text: '#fcd34d' },
-  high:     { bg: '#7c2d12', text: '#fb923c' },
-  critical: { bg: '#7f1d1d', text: '#f87171' },
-}
 
 const SOURCE_ICON: Record<string, string> = {
   email: '✉', pdf: '▤', image: '▣', sms: '✆', csv: '▦',
@@ -28,12 +22,14 @@ interface Props {
   complaint: EnrichedComplaint
 }
 
-export default function ComplaintCard({ complaint }: Props) {
-  const sev = SEVERITY_STYLE[complaint.severity] ?? SEVERITY_STYLE.low
+// Memoized: the live feed re-renders on every socket push, but a card only
+// needs to re-render when its own complaint object changes.
+function ComplaintCard({ complaint }: Props) {
+  const sev = SEVERITY[complaint.severity] ?? SEVERITY.low
   const isFailed = complaint.status === 'failed'
   const isPending = (complaint.status === 'pending' || complaint.status === 'processing') && !isFailed
   const isResolved = complaint.status === 'resolved'
-  const accent = isResolved ? '#10b981' : isFailed ? '#f97316' : sev.text
+  const accent = isResolved ? STATE.resolvedAccent : isFailed ? STATE.failedAccent : sev.text
   const [open, setOpen] = useState(false)
 
   return (
@@ -45,17 +41,17 @@ export default function ComplaintCard({ complaint }: Props) {
       >
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="flex items-center gap-2 min-w-0">
-            <span style={{ color: '#6b7280' }}>{SOURCE_ICON[complaint.source] ?? '•'}</span>
-            <span className="text-xs truncate" style={{ color: '#9ca3af' }}>
+            <span aria-hidden="true" style={{ color: color.text.muted }}>{SOURCE_ICON[complaint.source] ?? '•'}</span>
+            <span className="text-xs truncate" style={{ color: color.text.secondary }}>
               {complaint.location_hint || 'Unknown location'}
             </span>
           </div>
           {isResolved ? (
-            <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: '#064e3b', color: '#6ee7b7' }}>
+            <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: STATE.resolvedBadge.bg, color: STATE.resolvedBadge.text }}>
               ✓ RESOLVED
             </span>
           ) : isFailed ? (
-            <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: '#7c2d12', color: '#fdba74' }}>
+            <span className="text-xs px-1.5 py-0.5 rounded shrink-0 font-medium" style={{ background: STATE.failedBadge.bg, color: STATE.failedBadge.text }}>
               ⚠ NOT CLASSIFIED
             </span>
           ) : (
@@ -65,20 +61,20 @@ export default function ComplaintCard({ complaint }: Props) {
           )}
         </div>
 
-        <p className="text-sm mb-1.5 line-clamp-2" style={{ color: '#f9fafb' }}>
+        <p className="text-sm mb-1.5 line-clamp-2" style={{ color: color.text.primary }}>
           {complaint.raw_text}
         </p>
 
-        <div className="flex items-center justify-between text-xs gap-2" style={{ color: '#6b7280' }}>
+        <div className="flex items-center justify-between text-xs gap-2" style={{ color: color.text.muted }}>
           <span className="min-w-0 truncate">
             {isFailed ? (
-              <span style={{ color: '#fb923c' }} title={complaint.error ?? 'Classification failed'}>
+              <span style={{ color: STATE.failedText }} title={complaint.error ?? 'Classification failed'}>
                 ⚠ {complaint.error ?? 'Could not classify — try again later'}
               </span>
             ) : isPending ? (
-              <span style={{ color: '#f59e0b' }}>● analyzing…</span>
+              <span style={{ color: color.accent }}>● analyzing…</span>
             ) : (
-              <span style={{ color: '#9ca3af' }}>{complaint.issue_type?.replace(/_/g, ' ') ?? 'unknown'}</span>
+              <span style={{ color: color.text.secondary }}>{complaint.issue_type?.replace(/_/g, ' ') ?? 'unknown'}</span>
             )}
           </span>
           <span className="shrink-0">{timeAgo(complaint.timestamp)}</span>
@@ -93,3 +89,5 @@ export default function ComplaintCard({ complaint }: Props) {
     </>
   )
 }
+
+export default memo(ComplaintCard)

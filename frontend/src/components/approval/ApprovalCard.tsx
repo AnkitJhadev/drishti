@@ -2,6 +2,7 @@ import { useState } from 'react'
 import RecommendationCard from '../ai/RecommendationCard'
 import { useAIChatStore } from '../../stores/aiChatStore'
 import { sendOrQueue } from '../../services/actionQueue'
+import { color } from '../../theme/tokens'
 import type { AIRecommendation } from '../../types/ai'
 
 type Action = 'approve' | 'reject' | 'escalate'
@@ -48,8 +49,8 @@ export default function ApprovalCard({ recommendation }: Props) {
           className="absolute inset-0 z-10 flex items-center justify-center rounded-lg"
           style={{ background: 'rgba(17, 24, 39, 0.8)' }}
         >
-          <span className="inline-flex items-center gap-2 text-xs font-semibold" style={{ color: '#f9fafb' }}>
-            <span className="dr-spinner" style={{ width: 14, height: 14, color: '#f59e0b' }} />
+          <span className="inline-flex items-center gap-2 text-xs font-semibold" style={{ color: color.text.primary }}>
+            <span className="dr-spinner" style={{ width: 14, height: 14, color: color.accent }} />
             {busyLabel}
           </span>
         </div>
@@ -65,13 +66,13 @@ export default function ApprovalCard({ recommendation }: Props) {
           placeholder="Add an operator note (optional)…"
           rows={2}
           className="w-full mt-3 px-2 py-1.5 rounded text-xs outline-none resize-none"
-          style={{ background: '#0a0f1e', border: '1px solid #1f2937', color: '#f9fafb' }}
+          style={{ background: color.bg.page, border: `1px solid ${color.border.base}`, color: color.text.primary }}
         />
       ) : (
         <button
           onClick={() => setShowNote(true)}
           className="text-xs mt-2"
-          style={{ color: '#6b7280' }}
+          style={{ color: color.text.muted }}
         >
           + Add note
         </button>
@@ -83,7 +84,7 @@ export default function ApprovalCard({ recommendation }: Props) {
           onClick={() => act('approve')}
           disabled={busy !== null}
           className="flex-1 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
-          style={{ background: '#10b981', color: '#0a0f1e' }}
+          style={{ background: color.success, color: color.bg.page }}
         >
           ✓ Approve
         </button>
@@ -99,7 +100,7 @@ export default function ApprovalCard({ recommendation }: Props) {
           onClick={() => act('escalate')}
           disabled={busy !== null}
           className="px-3 py-1.5 rounded text-xs font-semibold transition-opacity disabled:opacity-50"
-          style={{ background: '#1f2937', color: '#fb923c' }}
+          style={{ background: color.border.base, color: '#fb923c' }}
         >
           ⤴ Escalate
         </button>

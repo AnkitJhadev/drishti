@@ -4,6 +4,11 @@
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
+# Prisma needs the openssl binary present to detect the right query-engine
+# (the -slim base omits it, which triggers a "failed to detect libssl" warning
+# and a fragile fallback).
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # Install ALL deps (incl. dev: typescript). Copy the Prisma schema first so the
 # `postinstall: prisma generate` step has it.
 COPY package*.json ./
@@ -22,6 +27,9 @@ RUN npm run build \
 FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+
+# openssl for the Prisma query engine at runtime (see builder stage note).
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 # Only production dependencies → smaller image. Prisma schema is needed for the
 # postinstall `prisma generate` (the client lands in node_modules/@prisma/client).

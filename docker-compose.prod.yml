@@ -1,9 +1,10 @@
 # Production stack for a single host — sized for a FREE-TIER EC2 (1 GB RAM
 # + the 2 GB swap file from DEPLOY.md §4).
 #
-# What runs here:  backend (your image) + caddy (HTTPS). That's all.
-# What is EXTERNAL: Postgres (Neon), Redis (Upstash) and Qdrant (Qdrant Cloud
-# free tier) — provided via .env.prod URLs.
+# What runs here:  backend (your image) + redis (BullMQ queue) + caddy (HTTPS).
+# What is EXTERNAL: Postgres (Neon) and Qdrant (Qdrant Cloud free tier) — via .env.prod.
+# Redis is now SELF-HOSTED here (no Upstash command quota); REDIS_URL is set
+# below and overrides any value in .env.prod.
 # The frontend is deployed separately on Vercel.
 #
 # Usage on the host:
@@ -34,6 +35,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
+      # Self-hosted Redis on this network — overrides any REDIS_URL in .env.prod.
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
     # No published ports — only Caddy talks to it (over the internal network).
     expose:
       - "4000"
@@ -41,7 +46,23 @@ services:
       # Persist the ~30MB on-device embedding model across image rebuilds.
       - hf_cache:/app/.cache
 
+  # ── BullMQ job queue — self-hosted, no command quota ─────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF persistence (queue survives restarts) + a memory cap that errors
+    # instead of silently dropping jobs if it ever fills (noeviction).
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
 volumes:
   hf_cache:
+  redis_data:
   caddy_data:
   caddy_config:

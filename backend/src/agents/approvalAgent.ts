@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { emitAlertNew, emitTowerStatusChanged } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 import type { TowerStatus } from '../types/tower'
@@ -48,26 +48,17 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ]
 
-interface RecRow {
-  id: string
-  tower_id: string | null
-  cluster_id: string | null
-  root_cause: string
-  suggested_action: string
-  priority: string
-}
-
 async function toolExecutor(name: string, input: Record<string, unknown>): Promise<unknown> {
   if (name === 'update_tower_status') {
     const { tower_id, status } = input as { tower_id: string; status: TowerStatus }
-    await query(`UPDATE towers SET status = $1, last_checked = NOW() WHERE id = $2`, [status, tower_id])
+    await prisma.towers.updateMany({ where: { id: tower_id }, data: { status, last_checked: new Date() } })
     emitTowerStatusChanged(tower_id, status)
     return { ok: true }
   }
 
   if (name === 'update_cluster_status') {
     const { cluster_id, status } = input as { cluster_id: string; status: string }
-    await query(`UPDATE clusters SET status = $1, updated_at = NOW() WHERE id = $2`, [status, cluster_id])
+    await prisma.clusters.updateMany({ where: { id: cluster_id }, data: { status, updated_at: new Date() } })
     return { ok: true }
   }
 
@@ -75,14 +66,12 @@ async function toolExecutor(name: string, input: Record<string, unknown>): Promi
     const { severity, title, message, tower_id } = input as {
       severity: string; title: string; message: string; tower_id?: string
     }
-    const rows = await query<{ id: string; created_at: string }>(
-      `INSERT INTO alerts (type, severity, title, message, tower_id, action_required)
-       VALUES ('recommendation_ready', $1, $2, $3, $4, FALSE)
-       RETURNING id, created_at`,
-      [severity, title, message, tower_id ?? null]
-    )
+    const created = await prisma.alerts.create({
+      data: { type: 'recommendation_ready', severity, title, message, tower_id: tower_id ?? null, action_required: false },
+      select: { id: true, created_at: true },
+    })
     emitAlertNew({
-      id: rows[0].id,
+      id: created.id,
       type: 'recommendation_ready' as AlertType,
       severity: severity as AlertSeverity,
       title,
@@ -90,7 +79,7 @@ async function toolExecutor(name: string, input: Record<string, unknown>): Promi
       tower_id,
       read: false,
       action_required: false,
-      created_at: rows[0].created_at,
+      created_at: (created.created_at ?? new Date()).toISOString(),
     })
     return { ok: true }
   }
@@ -105,13 +94,11 @@ export async function runApprovalAgent(
   recommendationId: string,
   decision: 'approved' | 'rejected' | 'escalated'
 ): Promise<void> {
-  const recs = await query<RecRow>(
-    `SELECT id, tower_id, cluster_id, root_cause, suggested_action, priority
-     FROM recommendations WHERE id = $1`,
-    [recommendationId]
-  )
-  if (recs.length === 0) return
-  const rec = recs[0]
+  const rec = await prisma.recommendations.findUnique({
+    where: { id: recommendationId },
+    select: { id: true, tower_id: true, cluster_id: true, root_cause: true, suggested_action: true, priority: true },
+  })
+  if (!rec) return
 
   const systemPrompt = `You are the resolution coordinator for a telecom operations platform.
 An operator has just ${decision} a recommendation. Execute the appropriate follow-up:

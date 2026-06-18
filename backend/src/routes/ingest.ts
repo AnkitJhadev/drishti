@@ -5,7 +5,7 @@ import { parseStructuredPdf, PdfFormatError } from '../parsers/pdfParser'
 import { parseCsv, CsvFormatError } from '../parsers/csvParser'
 import { parseJson, JsonFormatError } from '../parsers/jsonParser'
 import { geocodeLocation, isGeocodable } from '../utils/geocoder'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { addIngestJob } from '../queue/jobs/ingestJob'
 import { emitComplaintNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
@@ -122,23 +122,21 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
         const coords = geocodeLocation(record.locationHint ?? record.text)
         const sourceCol: ComplaintSource = source
 
-        const rows = await query<{ id: string }>(
-          `INSERT INTO complaints
-             (source, raw_text, location_hint, lat, lng, sender, timestamp, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-           RETURNING id`,
-          [
-            sourceCol,
-            record.text,
-            record.locationHint ?? null,
-            coords?.[0] ?? null,
-            coords?.[1] ?? null,
-            record.sender ?? null,
-            record.timestamp ?? new Date().toISOString(),
-          ]
-        )
+        const created = await prisma.complaints.create({
+          data: {
+            source: sourceCol,
+            raw_text: record.text,
+            location_hint: record.locationHint ?? null,
+            lat: coords?.[0] ?? null,
+            lng: coords?.[1] ?? null,
+            sender: record.sender ?? null,
+            ...(record.timestamp ? { timestamp: new Date(record.timestamp) } : {}),
+            status: 'pending',
+          },
+          select: { id: true },
+        })
 
-        const id = rows[0]?.id
+        const id = created.id
         if (id) {
           inserted.push(id)
           await addIngestJob({ complaintId: id, rawText: record.text, source: sourceCol })
@@ -219,23 +217,21 @@ router.post('/records', requireAuth, async (req: Request, res: Response): Promis
 
       const coords = geocodeLocation(location || text)
 
-      const rows = await query<{ id: string }>(
-        `INSERT INTO complaints
-           (source, raw_text, location_hint, lat, lng, sender, timestamp, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-         RETURNING id`,
-        [
+      const created = await prisma.complaints.create({
+        data: {
           source,
-          text,
-          location || null,
-          coords?.[0] ?? null,
-          coords?.[1] ?? null,
-          r.sender ?? null,
-          r.timestamp ?? new Date().toISOString(),
-        ]
-      )
+          raw_text: text,
+          location_hint: location || null,
+          lat: coords?.[0] ?? null,
+          lng: coords?.[1] ?? null,
+          sender: r.sender ?? null,
+          ...(r.timestamp ? { timestamp: new Date(r.timestamp) } : {}),
+          status: 'pending',
+        },
+        select: { id: true },
+      })
 
-      const id = rows[0]?.id
+      const id = created.id
       if (id) {
         inserted.push(id)
         await addIngestJob({ complaintId: id, rawText: text, source })

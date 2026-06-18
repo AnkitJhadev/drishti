@@ -1,12 +1,14 @@
 import { Router, type Request, type Response } from 'express'
 import { requireAuth } from '../middleware/auth'
-import { query, withTransaction } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { runApprovalAgent } from '../agents/approvalAgent'
 import { addPatternJob } from '../queue/jobs/patternJob'
 import { emitTowerStatusChanged, emitAlertNew } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 
 const router = Router()
+
+const PRIORITY_RANK: Record<string, number> = { critical: 1, high: 2, medium: 3, low: 4 }
 
 // POST /recommendations/analyze — manually trigger a pattern-analysis pass
 // (cluster recent complaints → correlate to towers → generate recommendations).
@@ -20,33 +22,33 @@ router.post('/analyze', requireAuth, async (_req: Request, res: Response): Promi
   }
 })
 
-// GET /recommendations — pending recommendations
+// GET /recommendations — by status, worst-priority first
 router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const status = (req.query.status as string) ?? 'pending'
 
-    const rows = await query(
-      `SELECT r.id, r.cluster_id, r.tower_id, r.root_cause, r.suggested_action,
-              r.affected_users, r.priority, r.confidence, r.status,
-              r.operator_note, r.created_at, r.reviewed_at, r.reviewed_by,
-              t.name as tower_name,
-              cl.issue_type as cluster_issue_type, cl.size as cluster_size
-       FROM recommendations r
-       LEFT JOIN towers t ON r.tower_id = t.id
-       LEFT JOIN clusters cl ON r.cluster_id = cl.id
-       WHERE r.status = $1
-       ORDER BY
-         CASE r.priority
-           WHEN 'critical' THEN 1
-           WHEN 'high'     THEN 2
-           WHEN 'medium'   THEN 3
-           WHEN 'low'      THEN 4
-         END,
-         r.created_at DESC`,
-      [status]
-    )
+    const rows = await prisma.recommendations.findMany({
+      where: { status },
+      include: {
+        towers: { select: { name: true } },
+        clusters: { select: { issue_type: true, size: true } },
+      },
+    })
 
-    res.json({ recommendations: rows })
+    const recommendations = rows
+      .sort(
+        (a, b) =>
+          (PRIORITY_RANK[a.priority] ?? 5) - (PRIORITY_RANK[b.priority] ?? 5) ||
+          (b.created_at?.getTime() ?? 0) - (a.created_at?.getTime() ?? 0)
+      )
+      .map(({ towers, clusters, ...r }) => ({
+        ...r,
+        tower_name: towers?.name ?? null,
+        cluster_issue_type: clusters?.issue_type ?? null,
+        cluster_size: clusters?.size ?? null,
+      }))
+
+    res.json({ recommendations })
   } catch (err) {
     logger.error(`GET /recommendations error: ${String(err)}`)
     res.status(500).json({ error: 'Failed to fetch recommendations' })
@@ -59,43 +61,45 @@ router.patch('/:id/approve', requireAuth, async (req: Request, res: Response): P
     const { note } = req.body as { note?: string }
     const operator = req.operator!
 
-    const rows = await query<{ id: string; tower_id: string; cluster_id: string }>(
-      `UPDATE recommendations
-       SET status = 'approved', operator_note = $1,
-           reviewed_at = NOW(), reviewed_by = $2
-       WHERE id = $3 AND status = 'pending'
-       RETURNING id, tower_id, cluster_id`,
-      [note ?? null, operator.email, req.params.id]
-    )
-
-    if (rows.length === 0) {
+    const updated = await prisma.recommendations.updateMany({
+      where: { id: req.params.id, status: 'pending' },
+      data: { status: 'approved', operator_note: note ?? null, reviewed_at: new Date(), reviewed_by: operator.email },
+    })
+    if (updated.count === 0) {
       res.status(404).json({ error: 'Recommendation not found or already reviewed' })
       return
     }
 
-    const rec = rows[0]
+    const rec = await prisma.recommendations.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, tower_id: true, cluster_id: true },
+    })
+    if (!rec) {
+      res.json({ ok: true })
+      return
+    }
 
-    // Create resolution ticket
-    await query(
-      `INSERT INTO resolutions (recommendation_id, tower_id, cluster_id, assigned_to)
-       VALUES ($1, $2, $3, $4)`,
-      [rec.id, rec.tower_id ?? null, rec.cluster_id ?? null, operator.email]
-    )
+    // Resolution ticket
+    await prisma.resolutions.create({
+      data: { recommendation_id: rec.id, tower_id: rec.tower_id, cluster_id: rec.cluster_id, assigned_to: operator.email },
+    })
 
-    // Create approval alert
-    await query(
-      `INSERT INTO alerts (type, severity, title, message, tower_id, action_required)
-       VALUES ('recommendation_ready', 'info', 'Recommendation Approved',
-               $1, $2, FALSE)`,
-      [`Recommendation ${rec.id} approved by ${operator.email}`, rec.tower_id ?? null]
-    )
+    // Approval alert
+    await prisma.alerts.create({
+      data: {
+        type: 'recommendation_ready',
+        severity: 'info',
+        title: 'Recommendation Approved',
+        message: `Recommendation ${rec.id} approved by ${operator.email}`,
+        tower_id: rec.tower_id,
+        action_required: false,
+      },
+    })
 
     logger.info(`Recommendation ${rec.id} approved by ${operator.email}`)
 
     // Best-effort AI follow-up (Agent 4) — never blocks the response
-    runApprovalAgent(rec.id, 'approved').catch((e) =>
-      logger.warn(`Approval agent skipped: ${String(e)}`)
-    )
+    runApprovalAgent(rec.id, 'approved').catch((e) => logger.warn(`Approval agent skipped: ${String(e)}`))
 
     res.json({ ok: true })
   } catch (err) {
@@ -110,16 +114,11 @@ router.patch('/:id/reject', requireAuth, async (req: Request, res: Response): Pr
     const { note } = req.body as { note?: string }
     const operator = req.operator!
 
-    const rows = await query(
-      `UPDATE recommendations
-       SET status = 'rejected', operator_note = $1,
-           reviewed_at = NOW(), reviewed_by = $2
-       WHERE id = $3 AND status = 'pending'
-       RETURNING id`,
-      [note ?? null, operator.email, req.params.id]
-    )
-
-    if (rows.length === 0) {
+    const updated = await prisma.recommendations.updateMany({
+      where: { id: req.params.id, status: 'pending' },
+      data: { status: 'rejected', operator_note: note ?? null, reviewed_at: new Date(), reviewed_by: operator.email },
+    })
+    if (updated.count === 0) {
       res.status(404).json({ error: 'Recommendation not found or already reviewed' })
       return
     }
@@ -138,12 +137,15 @@ router.patch('/:id/escalate', requireAuth, async (req: Request, res: Response): 
     const { note } = req.body as { note?: string }
     const operator = req.operator!
 
-    await query(
-      `INSERT INTO alerts (type, severity, title, message, action_required)
-       VALUES ('approval_pending', 'critical', 'Recommendation Escalated',
-               $1, TRUE)`,
-      [`Recommendation ${req.params.id} escalated by ${operator.email}. Note: ${note ?? 'none'}`]
-    )
+    await prisma.alerts.create({
+      data: {
+        type: 'approval_pending',
+        severity: 'critical',
+        title: 'Recommendation Escalated',
+        message: `Recommendation ${req.params.id} escalated by ${operator.email}. Note: ${note ?? 'none'}`,
+        action_required: true,
+      },
+    })
 
     logger.info(`Recommendation ${req.params.id} escalated by ${operator.email}`)
     res.json({ ok: true })
@@ -159,56 +161,56 @@ router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): P
   try {
     const operator = req.operator!
 
-    const recs = await query<{ id: string; tower_id: string | null; cluster_id: string | null }>(
-      `SELECT id, tower_id, cluster_id FROM recommendations WHERE id = $1`,
-      [req.params.id]
-    )
-    if (recs.length === 0) {
+    const rec = await prisma.recommendations.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, tower_id: true, cluster_id: true },
+    })
+    if (!rec) {
       res.status(404).json({ error: 'Recommendation not found' })
       return
     }
-    const rec = recs[0]
 
-    await withTransaction(async (client) => {
-      // Resolution ticket → resolved
-      await client.query(
-        `UPDATE resolutions SET status = 'resolved', resolved_at = NOW()
-         WHERE recommendation_id = $1`,
-        [rec.id]
-      )
-      // Cluster → resolved + its complaints → resolved
+    await prisma.$transaction(async (tx) => {
+      await tx.resolutions.updateMany({
+        where: { recommendation_id: rec.id },
+        data: { status: 'resolved', resolved_at: new Date() },
+      })
       if (rec.cluster_id) {
-        await client.query(`UPDATE clusters SET status = 'resolved', updated_at = NOW() WHERE id = $1`, [rec.cluster_id])
-        await client.query(`UPDATE complaints SET status = 'resolved' WHERE cluster_id = $1`, [rec.cluster_id])
+        await tx.clusters.updateMany({ where: { id: rec.cluster_id }, data: { status: 'resolved', updated_at: new Date() } })
+        await tx.complaints.updateMany({ where: { cluster_id: rec.cluster_id }, data: { status: 'resolved' } })
       }
-      // Tower → operational, counters reset
       if (rec.tower_id) {
-        await client.query(
-          `UPDATE towers SET status = 'operational', active_complaints = 0,
-           affected_users = 0, last_checked = NOW() WHERE id = $1`,
-          [rec.tower_id]
-        )
+        await tx.towers.updateMany({
+          where: { id: rec.tower_id },
+          data: { status: 'operational', active_complaints: 0, affected_users: 0, last_checked: new Date() },
+        })
       }
     })
 
     // Live updates
     if (rec.tower_id) emitTowerStatusChanged(rec.tower_id, 'operational')
-    const alertRows = await query<{ id: string; created_at: string }>(
-      `INSERT INTO alerts (type, severity, title, message, tower_id, action_required)
-       VALUES ('recommendation_ready', 'info', 'Incident Resolved', $1, $2, FALSE)
-       RETURNING id, created_at`,
-      [`Incident resolved by ${operator.email}. Tower restored to operational.`, rec.tower_id ?? null]
-    )
+    const message = `Incident resolved by ${operator.email}. Tower restored to operational.`
+    const alert = await prisma.alerts.create({
+      data: {
+        type: 'recommendation_ready',
+        severity: 'info',
+        title: 'Incident Resolved',
+        message,
+        tower_id: rec.tower_id,
+        action_required: false,
+      },
+      select: { id: true, created_at: true },
+    })
     emitAlertNew({
-      id: alertRows[0].id,
+      id: alert.id,
       type: 'recommendation_ready',
       severity: 'info',
       title: 'Incident Resolved',
-      message: `Incident resolved by ${operator.email}. Tower restored to operational.`,
+      message,
       tower_id: rec.tower_id ?? undefined,
       read: false,
       action_required: false,
-      created_at: alertRows[0].created_at,
+      created_at: (alert.created_at ?? new Date()).toISOString(),
     })
 
     logger.info(`Recommendation ${rec.id} resolved by ${operator.email}`)

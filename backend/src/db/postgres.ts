@@ -1,16 +1,20 @@
-import { Pool, type PoolClient } from 'pg'
+import { Pool } from 'pg'
 import fs from 'fs'
 import path from 'path'
 import { logger } from '../utils/logger'
+
+// NOTE: application queries use Prisma (see db/prisma.ts). This pg pool exists
+// ONLY to run the idempotent schema-creation migration on boot — a multi-
+// statement SQL file that Prisma's single-statement raw API can't execute in
+// one call — and to close cleanly on shutdown.
 
 // Managed Postgres (Supabase, Render, Neon, …) requires TLS; local Docker doesn't.
 const dbUrl = process.env.DATABASE_URL ?? ''
 const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')
 
-// Single shared connection pool — reused across the entire app
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 10,               // max 10 concurrent connections
+  max: 4,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 15000,
   // Enable SSL for hosted databases (managed providers use their own CA chain).
@@ -20,38 +24,6 @@ const pool = new Pool({
 pool.on('error', (err) => {
   logger.error(`Postgres pool error: ${err.message}`)
 })
-
-// ── Query helper ────────────────────────────────────────────────────────────
-export async function query<T = Record<string, unknown>>(
-  sql: string,
-  params?: unknown[]
-): Promise<T[]> {
-  const client: PoolClient = await pool.connect()
-  try {
-    const result = await client.query(sql, params)
-    return result.rows as T[]
-  } finally {
-    client.release()
-  }
-}
-
-// ── Transaction helper ──────────────────────────────────────────────────────
-export async function withTransaction<T>(
-  fn: (client: PoolClient) => Promise<T>
-): Promise<T> {
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    const result = await fn(client)
-    await client.query('COMMIT')
-    return result
-  } catch (err) {
-    await client.query('ROLLBACK')
-    throw err
-  } finally {
-    client.release()
-  }
-}
 
 // ── Run migrations ──────────────────────────────────────────────────────────
 export async function runMigrations(): Promise<void> {
@@ -68,7 +40,7 @@ export async function runMigrations(): Promise<void> {
     throw new Error(`Migration SQL not found. Looked in: ${candidates.join(', ')}`)
   }
   const sql = fs.readFileSync(sqlPath, 'utf-8')
-  await query(sql)
+  await pool.query(sql)
   logger.info('Migrations complete.')
 }
 

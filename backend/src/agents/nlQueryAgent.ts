@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { retrieveRelevant } from '../rag/retriever'
 import { formatHistory, type ChatTurn } from '../memory/chatMemory'
 import { logger } from '../utils/logger'
@@ -89,19 +89,17 @@ interface ToolContext {
   chart: Record<string, number> | null
 }
 
+const TOWER_RANK: Record<string, number> = { critical: 1, offline: 2, degraded: 3, operational: 4 }
+const PRIORITY_RANK: Record<string, number> = { critical: 1, high: 2, medium: 3, low: 4 }
+const TOWER_SELECT = { id: true, name: true, status: true, active_complaints: true, affected_users: true } as const
+
 function makeExecutor(ctx: ToolContext) {
   return async (name: string, input: Record<string, unknown>): Promise<unknown> => {
     if (name === 'search_rag_store') {
       const q = input.query as string
       try {
         const chunks = await retrieveRelevant(q, 5)
-        return {
-          results: chunks.map((c) => ({
-            text: c.text,
-            location: c.location_hint,
-            score: c.score,
-          })),
-        }
+        return { results: chunks.map((c) => ({ text: c.text, location: c.location_hint, score: c.score })) }
       } catch {
         return { results: [], note: 'Vector store unavailable' }
       }
@@ -109,105 +107,95 @@ function makeExecutor(ctx: ToolContext) {
 
     if (name === 'get_complaints_by_filter') {
       const groupBy = input.group_by as string
-      const allowed = ['issue_type', 'severity', 'status']
-      const col = allowed.includes(groupBy) ? groupBy : 'issue_type'
+      // Whitelisted column (never user-interpolated into SQL).
+      const col: 'issue_type' | 'severity' | 'status' =
+        groupBy === 'severity' ? 'severity' : groupBy === 'status' ? 'status' : 'issue_type'
 
-      const rows = await query<{ key: string; count: string }>(
-        `SELECT ${col} as key, COUNT(*) as count
-         FROM complaints
-         WHERE ${col} IS NOT NULL
-         GROUP BY ${col}
-         ORDER BY count DESC`
-      )
-
+      const all = await prisma.complaints.findMany({ select: { issue_type: true, severity: true, status: true } })
       const chart: Record<string, number> = {}
-      rows.forEach((r) => {
-        chart[r.key] = parseInt(r.count, 10)
-      })
-      ctx.chart = chart   // capture for visualization hint
+      for (const c of all) {
+        const key = c[col]
+        if (key) chart[key] = (chart[key] ?? 0) + 1
+      }
+      ctx.chart = chart // capture for visualization hint
       return { breakdown: chart }
     }
 
     if (name === 'get_tower_status') {
       const towerId = (input.tower_id as string | undefined)?.trim()
       const status = input.status as string | undefined
-      const cols = 'id, name, status, active_complaints, affected_users'
-      type Row = { id: string; name: string; status: string; active_complaints: number; affected_users: number }
 
-      let rows: Row[]
       if (towerId) {
         // Specific tower lookup — any status (so newly-added/operational towers are found).
-        rows = await query<Row>(`SELECT ${cols} FROM towers WHERE id = $1`, [towerId])
-        if (rows.length === 0) return { towers: [], note: `No tower found with id "${towerId}".` }
-      } else if (status) {
-        rows = await query<Row>(`SELECT ${cols} FROM towers WHERE status = $1 ORDER BY affected_users DESC`, [status])
-      } else {
-        // List all towers, worst-status first.
-        rows = await query<Row>(
-          `SELECT ${cols} FROM towers
-           ORDER BY CASE status WHEN 'critical' THEN 1 WHEN 'offline' THEN 2 WHEN 'degraded' THEN 3 ELSE 4 END,
-                    affected_users DESC`
-        )
+        const t = await prisma.towers.findUnique({ where: { id: towerId }, select: TOWER_SELECT })
+        if (!t) return { towers: [], note: `No tower found with id "${towerId}".` }
+        ctx.highlights.add(t.id)
+        return { towers: [t] }
       }
-
-      // Highlight on the map only for targeted lookups (not the full list).
-      if (towerId || status) rows.forEach((t) => ctx.highlights.add(t.id))
+      if (status) {
+        const rows = await prisma.towers.findMany({ where: { status }, select: TOWER_SELECT, orderBy: { affected_users: 'desc' } })
+        rows.forEach((t) => ctx.highlights.add(t.id))
+        return { towers: rows }
+      }
+      // List all towers, worst-status first.
+      const rows = await prisma.towers.findMany({ select: TOWER_SELECT })
+      rows.sort(
+        (a, b) =>
+          (TOWER_RANK[a.status ?? 'operational'] ?? 5) - (TOWER_RANK[b.status ?? 'operational'] ?? 5) ||
+          (b.affected_users ?? 0) - (a.affected_users ?? 0)
+      )
       return { towers: rows }
     }
 
     if (name === 'get_tower_summary') {
-      const rows = await query<{ status: string; count: string }>(
-        `SELECT status, COUNT(*) as count FROM towers GROUP BY status`
-      )
+      const grouped = await prisma.towers.groupBy({ by: ['status'], _count: { _all: true } })
       const by_status: Record<string, number> = { operational: 0, degraded: 0, critical: 0, offline: 0 }
       let total = 0
-      rows.forEach((r) => {
-        const n = parseInt(r.count, 10)
-        by_status[r.status] = n
+      for (const g of grouped) {
+        const n = g._count._all
+        if (g.status) by_status[g.status] = n
         total += n
-      })
+      }
       ctx.chart = by_status // visualize the status breakdown
       return { total, by_status }
     }
 
     if (name === 'get_recommendations_summary') {
-      const rows = await query<{ status: string; count: string }>(
-        `SELECT status, COUNT(*) as count FROM recommendations GROUP BY status`
-      )
+      const grouped = await prisma.recommendations.groupBy({ by: ['status'], _count: { _all: true } })
       const by_status: Record<string, number> = { pending: 0, approved: 0, rejected: 0 }
       let total = 0
-      rows.forEach((r) => {
-        const n = parseInt(r.count, 10)
-        by_status[r.status] = n
+      for (const g of grouped) {
+        const n = g._count._all
+        if (g.status) by_status[g.status] = n
         total += n
-      })
+      }
 
       // A few highest-priority pending ones for context (and map highlight).
-      const pending = await query<{ id: string; priority: string; root_cause: string; tower_id: string | null; tower_name: string | null }>(
-        `SELECT r.id, r.priority, r.root_cause, r.tower_id, t.name as tower_name
-         FROM recommendations r LEFT JOIN towers t ON r.tower_id = t.id
-         WHERE r.status = 'pending'
-         ORDER BY CASE r.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END
-         LIMIT 5`
-      )
+      const pendingRows = await prisma.recommendations.findMany({
+        where: { status: 'pending' },
+        select: { id: true, priority: true, root_cause: true, tower_id: true, towers: { select: { name: true } } },
+      })
+      const pending = pendingRows
+        .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 5) - (PRIORITY_RANK[b.priority] ?? 5))
+        .slice(0, 5)
+        .map((p) => ({ id: p.id, priority: p.priority, root_cause: p.root_cause, tower_id: p.tower_id, tower_name: p.towers?.name ?? null }))
       pending.forEach((p) => { if (p.tower_id) ctx.highlights.add(p.tower_id) })
 
       return { total, by_status, waiting_for_approval: by_status.pending, top_pending: pending }
     }
 
     if (name === 'get_cluster_summary') {
-      const rows = await query(
-        `SELECT cl.id, cl.issue_type, cl.size, cl.status, cl.tower_id,
-                t.name as tower_name
-         FROM clusters cl
-         LEFT JOIN towers t ON cl.tower_id = t.id
-         WHERE cl.status = 'open'
-         ORDER BY cl.size DESC LIMIT 10`
-      )
-      ;(rows as { tower_id: string | null }[]).forEach((c) => {
-        if (c.tower_id) ctx.highlights.add(c.tower_id)
+      const rows = await prisma.clusters.findMany({
+        where: { status: 'open' },
+        select: { id: true, issue_type: true, size: true, status: true, tower_id: true, towers: { select: { name: true } } },
+        orderBy: { size: 'desc' },
+        take: 10,
       })
-      return { clusters: rows }
+      const clusters = rows.map((c) => ({
+        id: c.id, issue_type: c.issue_type, size: c.size, status: c.status, tower_id: c.tower_id, tower_name: c.towers?.name ?? null,
+      }))
+      clusters.forEach((c) => { if (c.tower_id) ctx.highlights.add(c.tower_id) })
+      return { clusters }
     }
 
     throw new Error(`Unknown tool: ${name}`)

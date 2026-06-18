@@ -2,7 +2,7 @@ import { Worker, type ConnectionOptions } from 'bullmq'
 import IORedis from 'ioredis'
 import { runIngestionAgent } from '../agents/ingestionAgent'
 import { runPatternAgent } from '../agents/patternAgent'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { emitComplaintFailed, emitPatternComplete } from '../websocket/wsServer'
 import { logger } from '../utils/logger'
 import type { IngestJobData } from './jobs/ingestJob'
@@ -77,14 +77,14 @@ export function startWorkers(): void {
     void (async () => {
       try {
         // Don't clobber a complaint that actually progressed past classification.
-        await query(
-          `UPDATE complaints
+        // JSONB merge (|| operator) → use parameterized raw SQL via Prisma.
+        const meta = JSON.stringify({ error: reason, failed_at: new Date().toISOString() })
+        await prisma.$executeRaw`
+          UPDATE complaints
              SET status = 'failed',
-                 metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
-           WHERE id = $1
-             AND status IN ('pending', 'processing')`,
-          [complaintId, JSON.stringify({ error: reason, failed_at: new Date().toISOString() })]
-        )
+                 metadata = COALESCE(metadata, '{}'::jsonb) || ${meta}::jsonb
+           WHERE id = ${complaintId}::uuid
+             AND status IN ('pending', 'processing')`
         emitComplaintFailed(complaintId, reason)
         logger.warn(`Complaint ${complaintId} marked failed — ${reason}`)
       } catch (e) {

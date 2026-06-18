@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
-import { query, withTransaction } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import {
   emitRecommendationReady,
   emitAlertNew,
@@ -182,18 +182,31 @@ async function toolExecutor(
 ): Promise<unknown> {
   if (name === 'get_recent_complaints') {
     const limit = (input.limit as number) ?? 50
-    const rows = await query<ComplaintRow>(
-      `SELECT id, issue_type, severity, lat, lng, location_hint, raw_text, tower_id
-       FROM complaints
-       WHERE status = 'clustered' AND issue_type IS NOT NULL
-       ORDER BY timestamp DESC
-       LIMIT $1`,
-      [limit]
-    )
+    const rawRows = await prisma.complaints.findMany({
+      where: { status: 'clustered', issue_type: { not: null } },
+      select: { id: true, issue_type: true, severity: true, lat: true, lng: true, location_hint: true, raw_text: true, tower_id: true },
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    })
+    const rows: ComplaintRow[] = rawRows.map((r) => ({
+      id: r.id,
+      issue_type: (r.issue_type ?? 'unknown') as IssueType,
+      severity: r.severity ?? 'low',
+      lat: r.lat,
+      lng: r.lng,
+      location_hint: r.location_hint,
+      raw_text: r.raw_text,
+      tower_id: r.tower_id,
+    }))
 
-    const towers = await query<TowerRow>(
-      'SELECT id, name, lat, lng, status, coverage_radius_km FROM towers'
-    )
+    const towerRows = await prisma.towers.findMany({
+      select: { id: true, name: true, lat: true, lng: true, status: true, coverage_radius_km: true },
+    })
+    const towers: TowerRow[] = towerRows.map((t) => ({
+      id: t.id, name: t.name, lat: t.lat, lng: t.lng,
+      status: t.status ?? 'operational',
+      coverage_radius_km: t.coverage_radius_km ?? 2,
+    }))
 
     const clusters = clusterComplaints(rows)
 
@@ -219,40 +232,37 @@ async function toolExecutor(
       tower_id?: string
     }
 
-    const clusterId = await withTransaction(async (client) => {
-      const res = await client.query<{ id: string }>(
-        `INSERT INTO clusters (issue_type, size, center_lat, center_lng, radius_km, tower_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [issue_type, complaint_ids.length, center_lat, center_lng, radius_km, tower_id ?? null]
-      )
-      const id = res.rows[0].id
+    const clusterId = await prisma.$transaction(async (tx) => {
+      const cluster = await tx.clusters.create({
+        data: { issue_type, size: complaint_ids.length, center_lat, center_lng, radius_km, tower_id: tower_id ?? null },
+        select: { id: true },
+      })
+      const id = cluster.id
 
-      // Link complaints to this cluster
-      for (const cid of complaint_ids) {
-        await client.query(
-          `UPDATE complaints SET cluster_id = $1, tower_id = COALESCE($2, tower_id), status = 'recommended'
-           WHERE id = $3`,
-          [id, tower_id ?? null, cid]
-        )
-      }
+      // Link complaints to this cluster (COALESCE: keep existing tower if none given).
+      await tx.complaints.updateMany({
+        where: { id: { in: complaint_ids } },
+        data: { cluster_id: id, status: 'recommended', ...(tower_id ? { tower_id } : {}) },
+      })
 
-      // Update tower's active_complaints counter and recalculate status from count.
+      // Bump the tower's counters and recalculate status from the new count.
       // Thresholds: 0 → operational, 1–4 → degraded, 5+ → critical.
       // Never downgrade a tower that is already offline (manually set).
       if (tower_id) {
-        await client.query(
-          `UPDATE towers
-           SET active_complaints = active_complaints + $1,
-               affected_users    = affected_users + $2,
-               status = CASE
-                 WHEN status = 'offline' THEN 'offline'
-                 WHEN active_complaints + $1 >= 5 THEN 'critical'
-                 WHEN active_complaints + $1 >= 1 THEN 'degraded'
-                 ELSE 'operational'
-               END
-           WHERE id = $3`,
-          [complaint_ids.length, complaint_ids.length * 150, tower_id]
-        )
+        const t = await tx.towers.findUnique({
+          where: { id: tower_id },
+          select: { active_complaints: true, affected_users: true, status: true },
+        })
+        if (t) {
+          const newActive = (t.active_complaints ?? 0) + complaint_ids.length
+          const newAffected = (t.affected_users ?? 0) + complaint_ids.length * 150
+          const newStatus =
+            t.status === 'offline' ? 'offline' : newActive >= 5 ? 'critical' : newActive >= 1 ? 'degraded' : 'operational'
+          await tx.towers.update({
+            where: { id: tower_id },
+            data: { active_complaints: newActive, affected_users: newAffected, status: newStatus },
+          })
+        }
       }
 
       return id
@@ -276,27 +286,21 @@ async function toolExecutor(
       confidence: number
     }
 
-    const rows = await query<{ id: string }>(
-      `INSERT INTO recommendations
-         (cluster_id, tower_id, root_cause, suggested_action, affected_users, priority, confidence)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id`,
-      [cluster_id, tower_id ?? null, root_cause, suggested_action, affected_users, priority, confidence]
-    )
+    const created = await prisma.recommendations.create({
+      data: { cluster_id, tower_id: tower_id ?? null, root_cause, suggested_action, affected_users, priority, confidence },
+      select: { id: true },
+    })
 
-    // Degrade tower status if priority is high/critical
+    // Degrade tower status if priority is high/critical (only if still operational)
     if (tower_id && (priority === 'high' || priority === 'critical')) {
       const newStatus: TowerStatus = priority === 'critical' ? 'critical' : 'degraded'
-      await query(
-        `UPDATE towers SET status = $1 WHERE id = $2 AND status = 'operational'`,
-        [newStatus, tower_id]
-      )
+      await prisma.towers.updateMany({ where: { id: tower_id, status: 'operational' }, data: { status: newStatus } })
       emitTowerStatusChanged(tower_id, newStatus)
     }
 
     // Emit the recommendation live to the approval panel
     emitRecommendationReady({
-      id: rows[0].id,
+      id: created.id,
       cluster_id,
       tower_id: tower_id ?? '',
       root_cause,
@@ -308,8 +312,8 @@ async function toolExecutor(
       created_at: new Date().toISOString(),
     })
 
-    logger.info(`Recommendation created: ${rows[0].id} — priority: ${priority}`)
-    return { ok: true, recommendation_id: rows[0].id }
+    logger.info(`Recommendation created: ${created.id} — priority: ${priority}`)
+    return { ok: true, recommendation_id: created.id }
   }
 
   if (name === 'create_alert') {
@@ -323,16 +327,14 @@ async function toolExecutor(
       action_required: boolean
     }
 
-    const alertRows = await query<{ id: string; created_at: string }>(
-      `INSERT INTO alerts (type, severity, title, message, tower_id, cluster_id, action_required)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, created_at`,
-      [type, severity, title, message, tower_id ?? null, cluster_id ?? null, action_required]
-    )
+    const alert = await prisma.alerts.create({
+      data: { type, severity, title, message, tower_id: tower_id ?? null, cluster_id: cluster_id ?? null, action_required },
+      select: { id: true, created_at: true },
+    })
 
     // Emit the alert live to the sidebar feed
     emitAlertNew({
-      id: alertRows[0].id,
+      id: alert.id,
       type: type as AlertType,
       severity: severity as AlertSeverity,
       title,
@@ -341,7 +343,7 @@ async function toolExecutor(
       cluster_id,
       read: false,
       action_required,
-      created_at: alertRows[0].created_at,
+      created_at: (alert.created_at ?? new Date()).toISOString(),
     })
 
     logger.info(`Alert created — ${type} / ${severity}: ${title}`)

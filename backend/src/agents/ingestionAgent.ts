@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { runAgent } from './agentRunner'
-import { query } from '../db/postgres'
+import { prisma } from '../db/prisma'
 import { indexComplaint } from '../rag/indexer'
 import { geocodeLocation } from '../utils/geocoder'
 import { emitComplaintNew } from '../websocket/wsServer'
@@ -60,41 +60,34 @@ function makeToolExecutor(complaintId: string) {
     const location_hint = raw.location_hint
     const coords = location_hint ? geocodeLocation(location_hint) : null
 
-    await query(
-      `UPDATE complaints
-       SET issue_type = $1, severity = $2, confidence = $3,
-           location_hint = COALESCE($4, location_hint),
-           lat = COALESCE($5, lat), lng = COALESCE($6, lng),
-           status = 'processing'
-       WHERE id = $7`,
-      [issue_type, severity, raw.confidence, location_hint ?? null, coords?.[0] ?? null, coords?.[1] ?? null, complaintId]
-    )
+    await prisma.complaints.update({
+      where: { id: complaintId },
+      data: {
+        issue_type,
+        severity,
+        confidence: raw.confidence,
+        status: 'processing',
+        // COALESCE semantics — only overwrite when the agent produced a value.
+        ...(location_hint ? { location_hint } : {}),
+        ...(coords ? { lat: coords[0], lng: coords[1] } : {}),
+      },
+    })
 
     logger.info(`Complaint ${complaintId} classified — ${issue_type} / ${severity}`)
 
     // Emit the enriched complaint to the live feed
-    const rows = await query<{
-      id: string; source: string; raw_text: string; location_hint: string
-      lat: number; lng: number; sender: string; timestamp: string
-      status: string; issue_type: IssueType; severity: Severity; confidence: number
-    }>(
-      `SELECT id, source, raw_text, location_hint, lat, lng, sender,
-              timestamp, status, issue_type, severity, confidence
-       FROM complaints WHERE id = $1`,
-      [complaintId]
-    )
-    if (rows[0]) {
-      const c = rows[0]
+    const c = await prisma.complaints.findUnique({ where: { id: complaintId } })
+    if (c) {
       emitComplaintNew({
         id: c.id,
         source: c.source as EnrichedComplaint['source'],
         raw_text: c.raw_text,
         location_hint: c.location_hint ?? '',
-        timestamp: c.timestamp,
+        timestamp: (c.timestamp ?? new Date()).toISOString(),
         sender: c.sender ?? 'unknown',
         status: c.status as EnrichedComplaint['status'],
-        issue_type: c.issue_type,
-        severity: c.severity,
+        issue_type: (c.issue_type ?? 'unknown') as IssueType,
+        severity: (c.severity ?? 'low') as Severity,
         coordinates: [c.lat ?? 0, c.lng ?? 0],
         confidence: c.confidence ?? 0,
       })
@@ -122,17 +115,14 @@ export async function runIngestionAgent(
 
   // 2. Embed + index in code (no LLM round-trip needed)
   try {
-    const locRows = await query<{ location_hint: string | null }>(
-      `SELECT location_hint FROM complaints WHERE id = $1`,
-      [complaintId]
-    )
-    await indexComplaint(complaintId, rawText, source, locRows[0]?.location_hint ?? '')
+    const loc = await prisma.complaints.findUnique({ where: { id: complaintId }, select: { location_hint: true } })
+    await indexComplaint(complaintId, rawText, source, loc?.location_hint ?? '')
   } catch (err) {
     logger.warn(`Embedding skipped for ${complaintId}: ${String(err)}`)
   }
 
   // 3. Mark ready for clustering
-  await query(`UPDATE complaints SET status = 'clustered' WHERE id = $1`, [complaintId])
+  await prisma.complaints.update({ where: { id: complaintId }, data: { status: 'clustered' } })
 
   logger.info(`Ingestion agent complete for complaint ${complaintId}`)
 }

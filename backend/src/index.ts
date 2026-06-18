@@ -74,11 +74,11 @@ async function checkConnections(): Promise<void> {
 
   // 1. PostgreSQL (Neon) — retry once; free tier cold-starts can take ~10s
   try {
-    const { query } = await import('./db/postgres')
+    const { prisma } = await import('./db/prisma')
     let rows: { version: string }[] = []
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        rows = await query<{ version: string }>('SELECT version()')
+        rows = await prisma.$queryRaw<{ version: string }[]>`SELECT version()`
         break
       } catch (e) {
         if (attempt === 2) throw e

@@ -1,4 +1,4 @@
-import { query } from './postgres'
+import { prisma } from './prisma'
 import { logger } from '../utils/logger'
 
 // 20 towers spread across India:
@@ -49,36 +49,27 @@ const TOWERS = [
 
 export async function seedTowers(): Promise<void> {
   // Check if towers already exist — idempotent seed
-  const existing = await query<{ count: string }>('SELECT COUNT(*) as count FROM towers')
-  if (parseInt(existing[0].count, 10) > 0) {
-    logger.info(`Towers already seeded (${existing[0].count} found). Skipping.`)
+  const count = await prisma.towers.count()
+  if (count > 0) {
+    logger.info(`Towers already seeded (${count} found). Skipping.`)
     return
   }
 
   logger.info('Seeding 20 mock towers across India...')
 
-  for (const tower of TOWERS) {
-    const activeComplaints = tower.affected_users > 0
-      ? Math.floor(tower.affected_users / 300)
-      : 0
-
-    await query(
-      `INSERT INTO towers
-        (id, name, lat, lng, status, coverage_radius_km, active_complaints, affected_users)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (id) DO NOTHING`,
-      [
-        tower.id,
-        tower.name,
-        tower.lat,
-        tower.lng,
-        tower.status,
-        tower.coverage_radius_km,
-        activeComplaints,
-        tower.affected_users,
-      ]
-    )
-  }
+  await prisma.towers.createMany({
+    data: TOWERS.map((tower) => ({
+      id: tower.id,
+      name: tower.name,
+      lat: tower.lat,
+      lng: tower.lng,
+      status: tower.status,
+      coverage_radius_km: tower.coverage_radius_km,
+      active_complaints: tower.affected_users > 0 ? Math.floor(tower.affected_users / 300) : 0,
+      affected_users: tower.affected_users,
+    })),
+    skipDuplicates: true, // = ON CONFLICT (id) DO NOTHING
+  })
 
   logger.info('Tower seed complete. 20 towers inserted.')
 }

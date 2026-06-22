@@ -1,7 +1,9 @@
-# Environment
+# Environment — ignore every .env variant (.env, .env.prod, .env.local, …),
+# but keep the committed placeholder templates.
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+!.env.prod.example
 
 # Dependencies
 node_modules/

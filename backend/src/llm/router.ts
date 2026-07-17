@@ -2,7 +2,7 @@
 // All current agents need tool-calling, so they route through OpenAI-compatible
 // providers (Groq → Together). Vision is handled separately in gemini.ts.
 
-export type Provider = 'groq' | 'together' | 'gemini'
+export type Provider = 'groq' | 'cerebras' | 'together' | 'gemini'
 
 export type AgentTask =
   | 'classify'
@@ -13,14 +13,15 @@ export type AgentTask =
   | 'default'
 
 // Fallback order per task — try the first; on failure (incl. rate limits),
-// fall through to the next. Gemini catches Groq's daily-cap overflow.
+// fall through to the next. Groq + Cerebras are both free primaries; Gemini
+// catches their daily-cap overflow; Together is the last resort.
 export const TASK_ROUTES: Record<AgentTask, Provider[]> = {
-  classify:  ['groq', 'gemini', 'together'],
-  pattern:   ['groq', 'gemini', 'together'],
-  recommend: ['groq', 'gemini', 'together'],
-  nl_query:  ['groq', 'gemini', 'together'],
-  approval:  ['groq', 'gemini', 'together'],
-  default:   ['groq', 'gemini', 'together'],
+  classify:  ['groq', 'cerebras', 'gemini', 'together'],
+  pattern:   ['groq', 'cerebras', 'gemini', 'together'],
+  recommend: ['groq', 'cerebras', 'gemini', 'together'],
+  nl_query:  ['groq', 'cerebras', 'gemini', 'together'],
+  approval:  ['groq', 'cerebras', 'gemini', 'together'],
+  default:   ['groq', 'cerebras', 'gemini', 'together'],
 }
 
 export function routeFor(task: AgentTask): Provider[] {

@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
 import { groqClients, GROQ_MODEL } from './groq'
+import { cerebrasClient, CEREBRAS_MODEL } from './cerebras'
 import { togetherClient, TOGETHER_MODEL } from './together'
 import { runGeminiTools, hasGeminiKey } from './gemini'
 import { routeFor, type AgentTask, type Provider } from './router'
@@ -123,8 +124,8 @@ async function runOnProvider(
 function hasKey(provider: Provider): boolean {
   if (provider === 'groq') return groqClients.length > 0
   if (provider === 'gemini') return hasGeminiKey()
-  const key = process.env.TOGETHER_API_KEY
-  return Boolean(key && !key.startsWith('your-'))
+  const key = provider === 'cerebras' ? process.env.CEREBRAS_API_KEY : process.env.TOGETHER_API_KEY
+  return Boolean(key && !key.startsWith('your-') && !key.startsWith('no-'))
 }
 
 // ── Circuit breaker for fallback providers ────────────────────────────────
@@ -214,6 +215,9 @@ export async function runLLMAgent(
       }
       if (provider === 'groq') {
         return await runOnGroq(systemPrompt, userMessage, tools, toolExecutor, opts)
+      }
+      if (provider === 'cerebras') {
+        return await runOnProvider(cerebrasClient, CEREBRAS_MODEL, 'cerebras', systemPrompt, userMessage, tools, toolExecutor, opts)
       }
       // together
       return await runOnProvider(togetherClient, TOGETHER_MODEL, 'together', systemPrompt, userMessage, tools, toolExecutor, opts)

@@ -30,6 +30,9 @@ Thumbs.db
 postgres_data/
 qdrant_data/
 
+# k8s — the real secret, not the committed .example template
+k8s/secret.yaml
+
 # Vite
 frontend/.vite/
 

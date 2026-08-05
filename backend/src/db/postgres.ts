@@ -8,9 +8,14 @@ import { logger } from '../utils/logger'
 // statement SQL file that Prisma's single-statement raw API can't execute in
 // one call — and to close cleanly on shutdown.
 
-// Managed Postgres (Supabase, Render, Neon, …) requires TLS; local Docker doesn't.
+// Managed Postgres (Supabase, Render, Neon, …) requires TLS; local Docker/k8s
+// Postgres doesn't. An explicit ?sslmode= in the URL always wins (works for
+// any hostname — "postgres", "db", a k8s Service name, not just localhost);
+// otherwise fall back to the localhost heuristic for URLs that don't set one.
 const dbUrl = process.env.DATABASE_URL ?? ''
+const sslMode = /[?&]sslmode=([^&]+)/.exec(dbUrl)?.[1]
 const isLocalDb = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')
+const useSsl = sslMode ? sslMode !== 'disable' : !isLocalDb
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -18,7 +23,7 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 15000,
   // Enable SSL for hosted databases (managed providers use their own CA chain).
-  ...(isLocalDb ? {} : { ssl: { rejectUnauthorized: false } }),
+  ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 })
 
 pool.on('error', (err) => {

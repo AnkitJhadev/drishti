@@ -8,6 +8,7 @@ import { geocodeLocation, isGeocodable } from '../utils/geocoder'
 import { prisma } from '../db/prisma'
 import { addIngestJob } from '../queue/jobs/ingestJob'
 import { emitComplaintNew } from '../websocket/wsServer'
+import { publishEvent } from '../events/kafkaProducer'
 import { logger } from '../utils/logger'
 import type { ComplaintSource } from '../types/complaint'
 
@@ -141,6 +142,7 @@ router.post('/', requireAuth, upload.array('files', 10), async (req: Request, re
           inserted.push(id)
           await addIngestJob({ complaintId: id, rawText: record.text, source: sourceCol })
           logger.info(`Complaint ingested + job queued — id: ${id}, source: ${source}`)
+          publishEvent('drishti.complaints', { type: 'complaint.ingested', complaint_id: id, source: sourceCol })
 
           emitComplaintNew({
             id,
@@ -235,6 +237,7 @@ router.post('/records', requireAuth, async (req: Request, res: Response): Promis
       if (id) {
         inserted.push(id)
         await addIngestJob({ complaintId: id, rawText: text, source })
+        publishEvent('drishti.complaints', { type: 'complaint.ingested', complaint_id: id, source })
         emitComplaintNew({
           id,
           source,

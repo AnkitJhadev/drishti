@@ -104,7 +104,17 @@ export async function runIngestionAgent(
 ): Promise<void> {
   logger.info(`Ingestion agent started for complaint ${complaintId}`)
 
-  const systemPrompt = `You classify telecom complaints. Call classify_issue exactly once with the issue type, severity, confidence, and any location mentioned. Network outages and tower failures are more severe than slow internet.`
+  const systemPrompt = `You classify telecom complaints into exactly one issue_type. Call classify_issue exactly once.
+
+## Categories — pick the single best match, even if the wording is informal or doesn't exactly match the examples
+- network_outage: no signal, no service, "network down", "no coverage" — a complete or near-complete loss of connectivity.
+- call_drop: calls disconnecting or cutting off mid-conversation, poor call quality, echo.
+- slow_internet: slow data speeds, buffering, pages/videos not loading, "internet is slow".
+- tower_failure: the complaint explicitly blames a tower/mast (e.g. "tower is down", "mast not working"), or describes a highly localized total outage that points to one tower.
+- billing_issue: wrong charges, overcharge, billing/invoice disputes — no connectivity complaint.
+- unknown: ONLY when the text genuinely does not describe any of the above (e.g. gibberish, unrelated content, or too vague to tell what's wrong). Never use unknown just because the phrasing is informal, unusual, or not a perfect match — infer the closest category from context first.
+
+Also determine severity (low/medium/high/critical — outages and tower failures are more severe than slow internet or billing issues), a confidence score (0-1), and any location mentioned.`
 
   const userMessage = `Classify this complaint:\n"${rawText}"`
 

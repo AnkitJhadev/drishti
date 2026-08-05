@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: drishti
+spec:
+  # Starts at 2 so the Service is already load-balancing across pods; the
+  # HPA (hpa.yaml) then scales this up to 4 under real CPU load, or back
+  # down to its minReplicas: 1 when idle.
+  replicas: 2
+  selector:
+    matchLabels: { app: backend-api }
+  template:
+    metadata:
+      labels: { app: backend-api }
+    spec:
+      initContainers:
+        # Postgres/Qdrant/Redis take a few seconds to become ready; without
+        # this the app container crash-loops a couple of times first (index.ts
+        # hard-fails startup if Postgres/Qdrant aren't reachable). This just
+        # avoids the wait, it isn't required for correctness.
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432 && nc -z qdrant 6333 && nc -z redis 6379; do
+                echo "waiting for postgres/qdrant/redis..."; sleep 2
+              done
+      containers:
+        - name: backend
+          image: drishti-backend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef: { name: drishti-secrets }
+          env:
+            - { name: PROCESS_ROLE, value: "api" }
+            - { name: NODE_ENV, value: "production" }
+            - { name: PORT, value: "4000" }
+          readinessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 4000 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests: { memory: "384Mi", cpu: "200m" }
+            limits: { memory: "768Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api
+  namespace: drishti
+spec:
+  selector: { app: backend-api }
+  ports:
+    - { port: 4000, targetPort: 4000 }

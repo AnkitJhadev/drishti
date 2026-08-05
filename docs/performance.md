@@ -1,8 +1,8 @@
 # Performance & bundle strategy
 
-Drishti targets **low-bandwidth, low-spec, offline-first** clients (the Chanakya
-deployment environment), so the frontend is engineered to keep the initial download
-small and push heavy/rarely-used code off the critical path.
+Drishti targets **low-bandwidth, low-spec, offline-first** clients, so the frontend
+is engineered to keep the initial download small and push heavy/rarely-used code
+off the critical path.
 
 ## Strategy
 

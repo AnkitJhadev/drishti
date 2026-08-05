@@ -1,0 +1,29 @@
+# Scales backend-api horizontally on CPU load. Requires metrics-server in the
+# cluster (not installed by kind by default — see k8s/README.md "Scaling").
+#
+# backend-worker is scaled MANUALLY instead (kubectl scale), not by an HPA —
+# its real bottleneck is Groq's free-tier rate limit, not CPU, and that limit
+# is already enforced correctly across however many worker replicas you run
+# (BullMQ's rate limiter is a Redis-backed token bucket keyed by queue name,
+# not a per-process counter — verified in backend/node_modules/bullmq before
+# writing this comment). Autoscaling worker replicas on CPU would just burn
+# more pods without moving the actual bottleneck.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-api
+  namespace: drishti
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend-api
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

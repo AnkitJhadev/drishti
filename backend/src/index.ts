@@ -13,6 +13,7 @@ import { seedTowers } from './db/seed'
 import { seedOperator } from './db/seedOperator'
 import { startWorkers } from './queue/worker'
 import { initWebSocket } from './websocket/wsServer'
+import { disconnectKafka } from './events/kafkaProducer'
 import { errorHandler } from './middleware/errorHandler'
 import authRouter from './routes/auth'
 import ingestRouter from './routes/ingest'
@@ -124,19 +125,32 @@ async function checkConnections(): Promise<void> {
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 }
 
+// Single-process by default (EC2/docker-compose) — 'all' runs the HTTP+socket
+// server and the BullMQ worker in one process, exactly as before. Kubernetes
+// deployments set PROCESS_ROLE=api or PROCESS_ROLE=worker to split them into
+// independently scalable/restartable Deployments.
+const ROLE = (process.env.PROCESS_ROLE ?? 'all') as 'all' | 'api' | 'worker'
+const runsApi = ROLE === 'all' || ROLE === 'api'
+const runsWorker = ROLE === 'all' || ROLE === 'worker'
+
 async function bootstrap(): Promise<void> {
   await checkConnections()
   await runMigrations()
   await initQdrant()
   await seedTowers()
   await seedOperator()
-  initWebSocket(httpServer)
-  startWorkers()
 
-  httpServer.listen(PORT, () => {
-    logger.info(`Drishti backend running on port ${PORT}`)
-    logger.info(`Routes: /health /auth /ingest /complaints /towers /alerts /recommendations`)
-  })
+  if (runsApi) initWebSocket(httpServer)
+  if (runsWorker) startWorkers()
+
+  if (runsApi) {
+    httpServer.listen(PORT, () => {
+      logger.info(`Drishti backend running on port ${PORT} (role=${ROLE})`)
+      logger.info(`Routes: /health /auth /ingest /complaints /towers /alerts /recommendations`)
+    })
+  } else {
+    logger.info(`Drishti worker running (role=${ROLE}) — no HTTP server`)
+  }
 }
 
 bootstrap().catch((err: unknown) => {
@@ -161,7 +175,7 @@ process.on('uncaughtException', (err: Error) => {
 function shutdown(signal: string): void {
   logger.info(`${signal} received — shutting down`)
   httpServer.close(() => {
-    void Promise.allSettled([prisma.$disconnect(), pool.end()]).then(() => process.exit(0))
+    void Promise.allSettled([prisma.$disconnect(), pool.end(), disconnectKafka()]).then(() => process.exit(0))
   })
   // Hard exit if connections refuse to drain (Docker's own kill timeout is 10s)
   setTimeout(() => process.exit(1), 8000).unref()

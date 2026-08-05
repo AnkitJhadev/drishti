@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-worker
+  namespace: drishti
+spec:
+  # 2 replicas by default — verified safe: BullMQ's rate limiter is a
+  # Redis-backed token bucket keyed by queue name, not a per-process counter
+  # (backend/node_modules/bullmq/dist/cjs/classes/worker.js — moveToActive
+  # reads/writes a single Redis key shared by every worker on the queue), so
+  # the aggregate ≤4/min Groq rate limit holds correctly no matter how many
+  # replicas run. Scale further: kubectl scale deployment/backend-worker -n drishti --replicas=N
+  replicas: 2
+  selector:
+    matchLabels: { app: backend-worker }
+  template:
+    metadata:
+      labels: { app: backend-worker }
+    spec:
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres 5432 && nc -z qdrant 6333 && nc -z redis 6379; do
+                echo "waiting for postgres/qdrant/redis..."; sleep 2
+              done
+      containers:
+        - name: worker
+          image: drishti-backend:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef: { name: drishti-secrets }
+          env:
+            - { name: PROCESS_ROLE, value: "worker" }
+            - { name: NODE_ENV, value: "production" }
+          resources:
+            requests: { memory: "384Mi", cpu: "200m" }
+            limits: { memory: "768Mi" }
+# No Service — the worker has no HTTP server (PROCESS_ROLE=worker skips it),
+# it only consumes BullMQ jobs from Redis.

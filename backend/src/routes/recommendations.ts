@@ -4,6 +4,7 @@ import { prisma } from '../db/prisma'
 import { runApprovalAgent } from '../agents/approvalAgent'
 import { addPatternJob } from '../queue/jobs/patternJob'
 import { emitTowerStatusChanged, emitAlertNew } from '../websocket/wsServer'
+import { publishEvent } from '../events/kafkaProducer'
 import { logger } from '../utils/logger'
 
 const router = Router()
@@ -97,6 +98,7 @@ router.patch('/:id/approve', requireAuth, async (req: Request, res: Response): P
     })
 
     logger.info(`Recommendation ${rec.id} approved by ${operator.email}`)
+    publishEvent('drishti.recommendations', { type: 'recommendation.approved', recommendation_id: rec.id, operator: operator.email })
 
     // Best-effort AI follow-up (Agent 4) — never blocks the response
     runApprovalAgent(rec.id, 'approved').catch((e) => logger.warn(`Approval agent skipped: ${String(e)}`))
@@ -124,6 +126,7 @@ router.patch('/:id/reject', requireAuth, async (req: Request, res: Response): Pr
     }
 
     logger.info(`Recommendation ${req.params.id} rejected by ${operator.email}`)
+    publishEvent('drishti.recommendations', { type: 'recommendation.rejected', recommendation_id: req.params.id, operator: operator.email })
     res.json({ ok: true })
   } catch (err) {
     logger.error(`PATCH /recommendations/:id/reject error: ${String(err)}`)
@@ -214,6 +217,7 @@ router.patch('/:id/resolve', requireAuth, async (req: Request, res: Response): P
     })
 
     logger.info(`Recommendation ${rec.id} resolved by ${operator.email}`)
+    publishEvent('drishti.recommendations', { type: 'recommendation.resolved', recommendation_id: rec.id, operator: operator.email })
     res.json({ ok: true })
   } catch (err) {
     logger.error(`PATCH /recommendations/:id/resolve error: ${String(err)}`)

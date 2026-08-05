@@ -1,6 +1,49 @@
-# Deploying Drishti — AWS EC2 (backend) + Vercel (frontend)
+# Deploying Drishti
 
-This is the **production runbook** for the architecture you chose:
+Two deployment paths exist for this app, built for two different goals — pick based on which you actually need, not which sounds more impressive:
+
+| | Path A: Single-host (this is the live deployment) | Path B: Distributed |
+|---|---|---|
+| Where | AWS EC2 (one host) + Vercel | Kubernetes — `kind` locally, `k3s` for a real free deployment |
+| Process model | One Node process runs the API and the BullMQ worker together | `backend-api` and `backend-worker` are separate Deployments, scale independently |
+| Scaling | Manual, single instance | `backend-api`: `HorizontalPodAutoscaler` (1→4 replicas on CPU). `backend-worker`: multi-replica, verified safe via a Redis-shared rate limiter |
+| Event log | None | Kafka (KRaft, 3-partition topics) for audit/replay, alongside the primary job queue |
+| Stateful services | Postgres/Qdrant managed (Neon/Qdrant Cloud); Redis self-hosted | Postgres/Qdrant/Redis/Kafka all in-cluster |
+| Cost | Free tier / ~$0-15mo | Free (local) or free-forever (Oracle Cloud Always Free + k3s) |
+| When to use | It's simpler, and it's what's actually running in production today | Demonstrates the app restructured for horizontal scaling — every claim about it was run and verified, not just diagrammed |
+
+---
+
+## Path B: Distributed — Kubernetes + Kafka
+
+Full runbook: **[`k8s/README.md`](k8s/README.md)** — one-command bootstrap (`./setup.sh`), full manifest set, troubleshooting notes, and a "Scaling" section with the exact verification commands (HPA reporting live metrics, 2 worker replicas splitting jobs with no double-processing, etc.). Quick architecture view:
+
+```
+   Browser ──HTTPS──▶ Service: backend-api (ClusterIP, load-balanced)
+                              │
+                 ┌────────────┴────────────┐
+                 ▼                         ▼
+          backend-api pod(s) — scales 1→4 via HPA (70% CPU target)
+                 │                         │
+                 └────────────┬────────────┘
+                               ▼
+              Redis — BullMQ queue + shared rate-limit token bucket
+                               │
+                 ┌─────────────┴─────────────┐
+                 ▼                           ▼
+      backend-worker pod(s) — scale manually, verified safe in parallel
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+          Postgres          Qdrant       Kafka — 3-partition topics
+        (in-cluster)      (in-cluster)   drishti.complaints / .recommendations
+```
+
+The rest of this document is **Path A** — the runbook for what's actually live right now.
+
+---
+
+## Path A: Single-host — AWS EC2 (backend) + Vercel (frontend)
 
 ```
                     ┌─────────────────────────────────────────────┐
@@ -26,7 +69,7 @@ cluster URL; it must end with `:6333` and carry the API key.)
 
 ---
 
-## 0. Before you start — instance sizing ⚠️
+### 0. Before you start — instance sizing ⚠️
 
 The EC2 box runs only Caddy + the backend; Qdrant, Postgres and Redis are all managed.
 On the free tier (1 GB RAM) still create **the 2 GB swap file in §4** — the embedding
@@ -51,9 +94,9 @@ You also need:
 
 ---
 
-## 1. Provision the managed data stores (do this first)
+### 1. Provision the managed data stores (do this first)
 
-### Neon (Postgres)
+#### Neon (Postgres)
 1. Create a project — pick the region closest to the EC2 region (no Mumbai on Neon;
    Singapore `ap-southeast-1` pairs well with EC2 `ap-south-1`).
 2. **Connection string:** copy the **Direct** one (host *without* `-pooler`), not the
@@ -72,7 +115,7 @@ You also need:
 You do **not** need to run the schema by hand — the backend runs `001_init.sql` on boot
 (`runMigrations()`), seeds 20 towers, and seeds the admin operator automatically.
 
-### Upstash (Redis)
+#### Upstash (Redis)
 1. Create a database → copy the **`rediss://` TLS URL** (port 6379).
 2. TLS is auto-enabled by the app because the scheme is `rediss://`.
    ```
@@ -83,7 +126,7 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
    > one compose stanza: add a `redis:` container to docker-compose.prod.yml and set
    > `REDIS_URL=redis://redis:6379` — free, local, no quota (costs ~10 MB RAM on the box).
 
-### Qdrant Cloud (vectors)
+#### Qdrant Cloud (vectors)
 1. Sign up at [cloud.qdrant.io](https://cloud.qdrant.io) → create a **free-tier cluster**
    (1 GB, free forever) — pick the region nearest your EC2 if offered.
 2. Copy the **cluster URL** and create an **API key**. Two gotchas that make it look
@@ -96,7 +139,7 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
 
 ---
 
-## 2. Launch the EC2 instance
+### 2. Launch the EC2 instance
 
 1. **AMI:** Ubuntu 24.04 LTS. **Type:** `t3.micro` free tier (or `t3.small` on credits — §0).
    **Disk:** 20 GB gp3 (free tier includes 30 GB).
@@ -113,7 +156,7 @@ You do **not** need to run the schema by hand — the backend runs `001_init.sql
 
 ---
 
-## 3. Point DNS at the host
+### 3. Point DNS at the host
 
 Create an **A record**: `api.yourdomain.com → <Elastic IP>`. Wait for it to resolve
 (`dig +short api.yourdomain.com` should return your IP) **before** §6 — Caddy's cert issuance
@@ -121,7 +164,7 @@ will fail until DNS is live.
 
 ---
 
-## 4. Prepare the host — swap first, then Docker
+### 4. Prepare the host — swap first, then Docker
 
 ```bash
 ssh ubuntu@<elastic-ip>
@@ -144,7 +187,7 @@ docker --version && docker compose version
 
 ---
 
-## 5. Get the code + secrets onto the host
+### 5. Get the code + secrets onto the host
 
 ```bash
 git clone <your-repo-url> drishti
@@ -177,7 +220,7 @@ nano Caddyfile        # replace api.example.com with api.yourdomain.com
 
 ---
 
-## 6. Bring the stack up
+### 6. Bring the stack up
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
@@ -199,7 +242,7 @@ If cert issuance fails: DNS isn't resolving to this host yet (§3), or port 80 i
 
 ---
 
-## 7. Deploy the frontend to Vercel
+### 7. Deploy the frontend to Vercel
 
 1. Import the repo in Vercel. **Set Root Directory = `frontend`** (the `vercel.json` and Vite
    config live there). Framework auto-detects as Vite.
@@ -213,7 +256,7 @@ If cert issuance fails: DNS isn't resolving to this host yet (§3), or port 80 i
 
 ---
 
-## 8. Close the CORS loop
+### 8. Close the CORS loop
 
 The backend's CORS + Socket.io origin is `FRONTEND_URL`. Now that you have the Vercel URL:
 
@@ -229,7 +272,7 @@ Open the Vercel URL, log in with **`admin@drishti.com` / `drishti@123`** (seeded
 
 ---
 
-## 9. Stopping to save cost / restarting
+### 9. Stopping to save cost / restarting
 
 ```bash
 # Stop the instance from the AWS console (Elastic IP is retained).
@@ -242,7 +285,7 @@ and Qdrant are all external, so nothing is lost on instance stop.
 
 ---
 
-## Operational notes
+### Operational notes
 
 - **Logs:** `docker compose -f docker-compose.prod.yml logs -f <service>`
 - **Redeploy after a code push:**
@@ -255,7 +298,7 @@ and Qdrant are all external, so nothing is lost on instance stop.
 - **Groq free tier** is ~100K tokens/day + ~30 req/min. Multiple `GROQ_API_KEY_*` keys pool the
   quota; the worker is throttled (concurrency 1) to stay under limits.
 
-## Known stale artifact
+### Known stale artifact
 
 `render.yaml` describes an **alternative** Render + Vercel deploy and is **out of date** — it
 references the removed `VOYAGE_API_KEY` and is missing `GROQ_API_KEY_2/3`, `GROQ_MODEL`,

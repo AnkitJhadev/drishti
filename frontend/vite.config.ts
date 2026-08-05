@@ -80,7 +80,7 @@ export default defineConfig({
   },
   build: {
     // Split heavy libs into separate cacheable chunks — better for
-    // low-bandwidth / repeat loads on old hardware (Chanakya environments).
+    // low-bandwidth / repeat loads on old hardware.
     rollupOptions: {
       output: {
         manualChunks: {

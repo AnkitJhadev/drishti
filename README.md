@@ -28,11 +28,11 @@ network on a live map, **ask questions** in plain English, and **resolve** issue
 
 ## Why this project
 
-Drishti was built to demonstrate the exact frontend capabilities Sarvam AI's
-**Frontend Engineer, Chanakya** role calls for — production-grade interfaces for strategic-sector
-and enterprise AI that hold up in offline-first, low-bandwidth, hardened-client environments.
+Drishti was built to demonstrate production-grade frontend engineering for strategic-sector
+and enterprise AI — interfaces that hold up in offline-first, low-bandwidth, hardened-client
+environments.
 
-| Chanakya requirement | Where it lives in Drishti |
+| Capability | Where it lives in Drishti |
 |---|---|
 | Geospatial overlays | React-Leaflet map — status pins, complaint heatmap, click-to-place towers |
 | Simulation UIs | What-if tower-failure impact simulator (haversine redistribution model) |

@@ -10,6 +10,7 @@ interface AlertsResponse {
 
 export function useAlerts(): void {
   const setAlerts = useAlertsStore((s) => s.setAlerts)
+  const setUnreadCount = useAlertsStore((s) => s.setUnreadCount)
   const setLoading = useAlertsStore((s) => s.setLoading)
 
   useEffect(() => {
@@ -18,7 +19,10 @@ export function useAlerts(): void {
     api
       .get<AlertsResponse>('/alerts')
       .then(({ data }) => {
-        if (active) setAlerts(data.alerts)
+        if (active) {
+          setAlerts(data.alerts)
+          setUnreadCount(data.unread_count)
+        }
       })
       .catch(() => undefined)
       .finally(() => {
@@ -27,5 +31,5 @@ export function useAlerts(): void {
     return () => {
       active = false
     }
-  }, [setAlerts, setLoading])
+  }, [setAlerts, setUnreadCount, setLoading])
 }

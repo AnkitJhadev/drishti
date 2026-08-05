@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from 'react'
 import { useAlertsStore } from '../../stores/alertsStore'
+import { sendOrQueue } from '../../services/actionQueue'
 import IngestionPanel from '../complaints/IngestionPanel'
 import type { AlertSeverity } from '../../types/alert'
 
@@ -37,7 +38,14 @@ interface SidebarProps {
 
 export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const alerts = useAlertsStore((s) => s.alerts)
-  const unread = alerts.filter((a) => !a.read).length
+  const unread = useAlertsStore((s) => s.unreadCount)
+  const markRead = useAlertsStore((s) => s.markRead)
+
+  function handleAlertClick(id: string, isRead: boolean) {
+    if (isRead) return
+    markRead(id) // optimistic — badge should reflect the click immediately
+    sendOrQueue({ url: `/alerts/${id}/read`, label: 'mark alert read' }).catch(() => undefined)
+  }
   const [ingestOpen, setIngestOpen] = useState(false)
   const [ontologyOpen, setOntologyOpen] = useState(false)
   const [simOpen, setSimOpen] = useState(false)
@@ -162,12 +170,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
             </p>
           )}
           {alerts.map((alert) => (
-            <div
+            <button
               key={alert.id}
-              className="px-2 py-2 mb-1 rounded text-xs"
+              onClick={() => handleAlertClick(alert.id, alert.read)}
+              className="w-full px-2 py-2 mb-1 rounded text-xs text-left transition-colors"
               style={{
                 background: alert.read ? 'transparent' : '#1a2235',
                 borderLeft: `2px solid ${SEVERITY_COLOR[alert.severity]}`,
+                cursor: alert.read ? 'default' : 'pointer',
               }}
             >
               <div className="font-medium mb-0.5" style={{ color: '#f9fafb' }}>
@@ -176,7 +186,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
               <div style={{ color: '#9ca3af' }} className="line-clamp-2">
                 {alert.message}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

@@ -26,7 +26,9 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'get_complaints_by_filter',
-    description: 'Get complaint counts grouped by a field (issue_type, severity, or status)',
+    description:
+      'Get the TOTAL complaint count plus a breakdown by a field (issue_type, severity, or status). ' +
+      'The returned total is authoritative — never state a total by summing the breakdown yourself.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -118,7 +120,7 @@ function makeExecutor(ctx: ToolContext) {
         if (key) chart[key] = (chart[key] ?? 0) + 1
       }
       ctx.chart = chart // capture for visualization hint
-      return { breakdown: chart }
+      return { total: all.length, breakdown: chart }
     }
 
     if (name === 'get_tower_status') {
@@ -223,7 +225,7 @@ You help engineers triage network incidents, investigate complaints, and monitor
 - search_rag_store: find complaints that match a concept (e.g. "no signal in Andheri"), useful for root-cause investigation.
 - get_tower_summary: the TOTAL tower count + status breakdown — ALWAYS use this for "how many towers", totals, or network-health overviews. Do not infer totals from a filtered list.
 - get_tower_status: look up a SPECIFIC tower by ID, or list towers of one status. Use for "show me critical towers" or checking a named tower — NOT for counting all towers.
-- get_complaints_by_filter: get counts broken down by issue_type, severity, or status — use for trend questions and summaries.
+- get_complaints_by_filter: the TOTAL complaint count plus a breakdown by issue_type, severity, or status — always quote the returned total directly, never sum the breakdown yourself.
 - get_cluster_summary: get open incident clusters with their linked towers — use for "what's the biggest incident right now?".
 - get_recommendations_summary: counts of recommendations/approvals by status (pending = awaiting approval) — use for "how many are waiting for approval?" and approval-queue questions.
 

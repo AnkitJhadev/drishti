@@ -93,10 +93,13 @@ export default function DrishtiMap() {
         style={{ height: '100%', width: '100%', background: '#0a0f1e', cursor: addMode ? 'crosshair' : '' }}
         zoomControl={false}
       >
-        {/* Dark tile layer (CartoDB dark matter — free, no key) */}
+        {/* Dark tile layer — Esri World Dark Gray Base (free, no API key).
+            CartoDB's free tiles now require a key, so we use Esri's open
+            basemap which needs none. Note Esri uses {z}/{y}/{x} tile order. */}
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; OpenStreetMap &copy; CARTO'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+          attribution='&copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+          maxZoom={16}
         />
 
         {showHeatmap && <ComplaintHeatmap complaints={complaints} />}

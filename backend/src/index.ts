@@ -117,8 +117,10 @@ async function checkConnections(): Promise<void> {
     await qdrant.getCollections()
     logger.info(`  ✅  Qdrant   (Cloud)    — connected`)
   } catch (e) {
-    logger.error(`  ❌  Qdrant   (Cloud)    — FAILED: ${String(e)}`)
-    throw e
+    // Non-fatal: Qdrant only powers RAG semantic search. If it's asleep
+    // (free-tier clusters hibernate) the app still runs — map, complaints,
+    // ingestion, analytics and approvals all work; RAG resumes when it wakes.
+    logger.warn(`  ⚠️   Qdrant   (Cloud)    — UNREACHABLE: ${String(e)} (RAG search disabled until it's back)`)
   }
 
   logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
@@ -127,7 +129,13 @@ async function checkConnections(): Promise<void> {
 async function bootstrap(): Promise<void> {
   await checkConnections()
   await runMigrations()
-  await initQdrant()
+  // Non-fatal: creating/checking the Qdrant collection must not block startup
+  // if the vector store is asleep — RAG indexing/search degrade gracefully.
+  try {
+    await initQdrant()
+  } catch (e) {
+    logger.warn(`Qdrant init skipped (vector store unreachable): ${String(e)}`)
+  }
   await seedTowers()
   await seedOperator()
   initWebSocket(httpServer)
